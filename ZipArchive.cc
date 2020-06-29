@@ -78,7 +78,7 @@ struct LFH
 // central directory file header
 struct CDFH
 {
-  CDFH( LFH *lfh )
+  CDFH( struct stat *fileInfo, LFH *lfh )
   {
     zipVersion = ( 3 << 8 ) | 63;
     minZipVersion = lfh->minZipVersion;
@@ -94,7 +94,7 @@ struct CDFH
     commentLength = 0;
     diskNb = 0;
     internAttr = 0;
-    externAttr = 0;
+    externAttr = fileInfo->st_mode << 16;
     // todo: different offset when appending
     // todo: deal with this for ZIP64
     offset = 0;
@@ -201,7 +201,7 @@ class ZipArchive
       }
       
       lfh = new LFH( &fileInfo, inputFilename, crc );
-      cdfh = new CDFH( lfh );
+      cdfh = new CDFH( &fileInfo, lfh );
       eocd = new EOCD( lfh, cdfh );
     }
 
