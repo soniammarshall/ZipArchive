@@ -129,6 +129,56 @@ struct CDFH
   static const uint32_t cdfhSign = 0x02014b50;
 };
 
+// ZIP64 end of central directory record
+struct ZIP64_EOCD
+{
+  ZIP64_EOCD()
+  {
+    //zip64EocdSize;
+    //zipVersion;
+    //minZipVersion;
+    //nbDisk;
+    //nbDiskCd;
+    //nbCdRecD;
+    //nbCdRec;
+    //cdSize;
+    //cdOffset;
+    //extensibleData;
+  }
+  
+  uint64_t zip64EocdSize;
+  uint16_t zipVersion;
+  uint16_t minZipVersion;
+  uint32_t nbDisk;
+  uint32_t nbDiskCd;
+  uint64_t nbCdRecD;
+  uint64_t nbCdRec;
+  uint64_t cdSize;
+  uint64_t cdOffset;
+  std::string extensibleData;
+
+  static const uint32_t zip64EocdBaseSize = 56;
+  static const uint32_t zip64EocdSign = 0x06064b50;
+};
+
+// ZIP64 end of central directory locator
+struct ZIP64_EOCDL
+{
+  ZIP64_EOCDL()
+  {
+    //nbDiskZip64Eocd = ?;
+    //zip64EocdOffset = ?;
+    //totalNbDisks = ?;
+  }
+  
+  uint32_t nbDiskZip64Eocd;
+  uint64_t zip64EocdOffset;
+  uint32_t totalNbDisks;
+
+  static const uint32_t zip64EocdlSize = 20;
+  static const uint32_t zip64EocdlSign = 0x07064b50;
+};
+
 // end of central directory record
 struct EOCD
 {
@@ -171,6 +221,7 @@ class ZipArchive
       this->inputFilename = inputFilename;
       this->archiveFilename = archiveFilename;
       this->crc = crc;
+      useZip64 = false;
     }
     
     void openArchive()
@@ -203,6 +254,11 @@ class ZipArchive
       lfh = new LFH( &fileInfo, inputFilename, crc );
       cdfh = new CDFH( &fileInfo, lfh );
       eocd = new EOCD( lfh, cdfh );
+      if ( useZip64 )
+      {
+        zip64Eocd = new ZIP64_EOCD();
+        zip64Eocdl = new ZIP64_EOCDL();
+      }
     }
 
     void writeArchive()
@@ -210,6 +266,11 @@ class ZipArchive
       writeLfh();
       writeFileData();
       writeCdfh();
+      if ( useZip64 )
+      {
+        writeZip64Eocd();
+        writeZip64Eocdl();
+      }
       writeEocd();
     }
 
@@ -264,6 +325,23 @@ class ZipArchive
       write( archiveFd, buffer, size );
     }
 
+    void writeZip64Eocd()
+    {
+    }
+
+    void writeZip64Eocdl()
+    {
+      uint32_t size = zip64Eocdl->zip64EocdlSize;
+      char buffer[size];
+      std::memcpy( buffer, &zip64Eocdl->zip64EocdlSign, 4 );
+      std::memcpy( buffer + 4, &zip64Eocdl->nbDiskZip64Eocd, 4 );
+      std::memcpy( buffer + 8, &zip64Eocdl->zip64EocdOffset, 8 );
+      std::memcpy( buffer + 16, &zip64Eocdl->totalNbDisks, 4 ;)
+
+      // todo: error handling 
+      write( archiveFd, buffer, size );
+    }
+
     void writeEocd()
     {
       uint32_t size = eocd->eocdSize;
@@ -312,7 +390,10 @@ class ZipArchive
     LFH *lfh;
     CDFH *cdfh;
     EOCD *eocd;
+    ZIP64_EOCD *zip64Eocd;
+    ZIP64_EOCDL *zip64Eocdl;
     uint32_t crc;
+    bool useZip64;
 };
 
 // run as ./ZipArchive <input filename> <output filename>
