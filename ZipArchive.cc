@@ -92,9 +92,10 @@ struct LFH
     extra = new ZipExtra( fileInfo->st_size );
     extraLength = extra->totalSize;    
     if ( extraLength == 0 )
-      minZipVersion = ( 3 << 8 ) | 10 ;
+      minZipVersion = 10;
     else
-      minZipVersion = ( 3 << 8 ) | 45 ;
+      minZipVersion = 45;
+    std::cout << "min zip version (LFH): " << std::dec << minZipVersion << "\n";
     // todo: filepath vs filename
     this->filename = filename;
     filenameLength = this->filename.length();
@@ -163,9 +164,9 @@ struct CDFH
     extra = new ZipExtra( lfh->extra, bigOffset );
     extraLength = extra->totalSize;
     if ( extraLength == 0 )
-      minZipVersion = ( 3 << 8 ) | 10 ;
+      minZipVersion = 10;
     else
-      minZipVersion = ( 3 << 8 ) | 45 ;
+      minZipVersion = 45;
     filename = lfh->filename;
     comment = "";
     cdfhSize = cdfhBaseSize + filenameLength + extraLength + commentLength;
@@ -248,7 +249,7 @@ struct ZIP64_EOCD
   ZIP64_EOCD( EOCD *eocd, LFH *lfh )
   {
     zipVersion = ( 3 << 8 ) | 63;
-    minZipVersion = ( 3 << 8 ) | 45;
+    minZipVersion = 45;
     nbDisk = 0;
     nbDiskCd = 0;
     // todo: change for when appending a file
@@ -540,10 +541,13 @@ class ZipArchive
       std::cout << std::hex << "extra file size: " << lfh->extra->compressedSize << "\n";
       std::cout << std::hex << "CDFH size: " << cdfh->cdfhSize << "\n";
       std::cout << std::hex << "EOCD cdSize: " << eocd->cdSize << "\n";
-      std::cout << std::hex << "ZIP64 EOCD cdSize: " << zip64Eocd->cdSize << "\n";
       std::cout << std::hex << "EOCD cdOffset: " << eocd->cdOffset << "\n";
-      std::cout << std::hex << "ZIP64 EOCD cdOffset: " << zip64Eocd->cdOffset << "\n";
-      std::cout << std::hex << "ZIP64 EOCDL zip64EocdOffset: " << zip64Eocdl->zip64EocdOffset << "\n";
+      if ( eocd->useZip64 )
+      {
+        std::cout << std::hex << "ZIP64 EOCD cdSize: " << zip64Eocd->cdSize << "\n";
+        std::cout << std::hex << "ZIP64 EOCD cdOffset: " << zip64Eocd->cdOffset << "\n";
+        std::cout << std::hex << "ZIP64 EOCDL zip64EocdOffset: " << zip64Eocdl->zip64EocdOffset << "\n";
+      }
       std::cout << "useZip64: " << eocd->useZip64 << "\n";
     }
  
