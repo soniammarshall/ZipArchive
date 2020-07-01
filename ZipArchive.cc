@@ -8,6 +8,73 @@
 #include <ctime>
 #include <cstring>
 
+#include <cstdlib>
+// ZIP64 extended information extra field
+struct ZipExtra
+{
+  ZipExtra()
+  {
+    dataSize = 0;
+    uncompressedSize = 0;
+    compressedSize = 0;
+    offset = 0;
+    nbDisk = 0;
+    totalSize = 0;
+  }
+
+  ZipExtra( uint64_t fileSize )
+  {
+    dataSize = 16;
+    uncompressedSize = fileSize;
+    compressedSize = fileSize;
+    offset = 0;
+    nbDisk = 0;
+    totalSize = dataSize + 4;
+  }
+
+  ZipExtra( uint64_t fileSize, uint64_t offset, bool includeSize )
+  {
+    dataSize = 24;
+    if ( includeSize )
+    {
+      uncompressedSize = fileSize;
+      compressedSize = fileSize;
+    }
+    else
+    {
+      uncompressedSize = 0;
+      compressedSize = 0;
+    }
+    this->offset = offset;
+    nbDisk = 0;
+    totalSize = dataSize + 4;
+  }
+ 
+  void concatenateFields( char *buffer )
+  {
+    std::memcpy( buffer, &headerID, 2 );
+    std::memcpy( buffer + 2, &dataSize, 2 );
+    std::memcpy( buffer + 4, &uncompressedSize, 8 );
+    std::memcpy( buffer + 12, &compressedSize, 8 );
+    if ( totalSize >= 24 )
+    {
+      std::memcpy( buffer + 20, &offset, 8 );
+    }
+    if ( totalSize >= 32 )
+    {
+      std::memcpy( buffer + 28, &nbDisk, 4 );
+    }
+  }
+ 
+  static const uint16_t headerID = 0x0001;
+  uint16_t dataSize;
+  uint64_t uncompressedSize;
+  uint64_t compressedSize;
+  uint64_t offset;
+  uint32_t nbDisk;
+  uint16_t totalSize;
+};
+
 // local file header
 struct LFH
 {
@@ -18,15 +85,22 @@ struct LFH
     generalBitFlag = 0;
     compressionMethod = 0;
     ZCRC32 = crc;
-    // todo: deal with this for ZIP64
-    compressedSize = fileInfo->st_size;
-    uncompressedSize = fileInfo->st_size;
+    if ( fileInfo->st_size > 4294967295 ) 
+    {
+      compressedSize = -1;
+      uncompressedSize = -1;
+      extra = new ZipExtra( fileInfo->st_size );
+    }
+    else
+    {
+      compressedSize = fileInfo->st_size;
+      uncompressedSize = fileInfo->st_size;
+      extra = new ZipExtra();
+    }
+    extraLength = extra->totalSize;    
     // todo: filepath vs filename
     this->filename = filename;
     filenameLength = this->filename.length();
-    // todo: deal with this for ZIP64
-    extra = "";
-    extraLength = 0;
     
     SetDateTime( fileInfo );
 
@@ -44,17 +118,8 @@ struct LFH
     uint16_t year = t->tm_year - 80;
     uint16_t month = t->tm_mon + 1;
     uint16_t day = t->tm_mday;  
-    
     lastModFileTime = ( hour << 11 ) | ( min << 5 ) | sec ;
     lastModFileDate =  ( year << 9 ) | ( month << 5 ) | day ;
-
-    // tm format
-    //std::cout << "hour: " << t->tm_hour << " min: " << t->tm_min << " sec: " << t->tm_sec << "\n";  
-    //std::cout << "day: " << t->tm_mday << " month: " << t->tm_mon << " year: " << t->tm_year << "\n"; 
-    // MS DOS format
-    //std::cout << "hour: " << hour << " min: " << min << " sec: " << sec << "\n";  
-    //std::cout << "day: " << day << " month: " << month << " year: " << year << "\n";
-    //std::cout << "date: " << lastModFileDate << " time: " << lastModFileTime << "\n";
   }
  
   uint16_t minZipVersion;
@@ -68,7 +133,7 @@ struct LFH
   uint16_t filenameLength;
   uint16_t extraLength;
   std::string filename;
-  std::string extra;
+  ZipExtra *extra;
   uint32_t lfhSize;
   
   static const uint32_t lfhBaseSize = 30;
@@ -90,16 +155,40 @@ struct CDFH
     compressedSize = lfh->compressedSize;
     uncompressedSize = lfh->uncompressedSize;
     filenameLength = lfh->filenameLength;
-    extraLength = lfh->extraLength;
     commentLength = 0;
-    diskNb = 0;
+    nbDisk = 0;
     internAttr = 0;
     externAttr = fileInfo->st_mode << 16;
     // todo: different offset when appending
-    // todo: deal with this for ZIP64
     offset = 0;
+    if ( offset > 4294967295) 
+    {
+      offset = -1;
+      bool includeSize;
+      if ( uncompressedSize == -1 )
+      {
+        includeSize = true;
+        extra = new ZipExtra( lfh->extra->uncompressedSize, offset, includeSize );
+      }
+      else
+      {
+        includeSize = false;
+        extra = new ZipExtra( uncompressedSize, offset, includeSize );
+      }
+    }
+    else
+    {     
+      if ( uncompressedSize == -1 )
+      {
+        extra = new ZipExtra( lfh->extra->uncompressedSize )
+      }
+      else
+      {
+        extra = new ZipExtra();
+      }
+    }
+    extraLength = extra->totalSize;
     filename = lfh->filename;
-    extra = lfh->extra;
     comment = "";
     cdfhSize = cdfhBaseSize + filenameLength + extraLength + commentLength;
   }
@@ -116,12 +205,12 @@ struct CDFH
   uint16_t filenameLength;
   uint16_t extraLength;
   uint16_t commentLength;
-  uint16_t diskNb;
+  uint16_t nbDisk;
   uint16_t internAttr;
   uint32_t externAttr;
   uint32_t offset;
   std::string filename;
-  std::string extra;
+  ZipExtra *extra;
   std::string comment;
   uint32_t cdfhSize;
  
@@ -134,16 +223,18 @@ struct ZIP64_EOCD
 {
   ZIP64_EOCD()
   {
-    //zip64EocdSize;
-    //zipVersion;
-    //minZipVersion;
-    //nbDisk;
-    //nbDiskCd;
-    //nbCdRecD;
-    //nbCdRec;
-    //cdSize;
-    //cdOffset;
-    //extensibleData;
+    //zip64EocdSize = ?;
+    //zipVersion = ?;
+    //minZipVersion ?;
+    nbDisk = 0;
+    nbDiskCd = 0;
+    //nbCdRecD = ?;
+    //nbCdRec = ?;
+    //cdSize = ?;
+    //cdOffset = ?;
+    extensibleData = "";
+    extensibleDataLength = 0;
+    //zip64EocdTotalSize = ?;
   }
   
   uint64_t zip64EocdSize;
@@ -156,6 +247,9 @@ struct ZIP64_EOCD
   uint64_t cdSize;
   uint64_t cdOffset;
   std::string extensibleData;
+  uint16_t extensibleDataLength;
+  // todo: decide if right type
+  uint64_t zip64EocdTotalSize;
 
   static const uint32_t zip64EocdBaseSize = 56;
   static const uint32_t zip64EocdSign = 0x06064b50;
@@ -166,16 +260,16 @@ struct ZIP64_EOCDL
 {
   ZIP64_EOCDL()
   {
-    //nbDiskZip64Eocd = ?;
+    nbDiskZip64Eocd = 0;
     //zip64EocdOffset = ?;
-    //totalNbDisks = ?;
+    totalNbDisks = 1;
   }
   
   uint32_t nbDiskZip64Eocd;
   uint64_t zip64EocdOffset;
   uint32_t totalNbDisks;
 
-  static const uint32_t zip64EocdlSize = 20;
+  static const uint16_t zip64EocdlSize = 20;
   static const uint32_t zip64EocdlSign = 0x07064b50;
 };
 
@@ -290,8 +384,14 @@ class ZipArchive
       std::memcpy( buffer + 26, &lfh->filenameLength, 2 );
       std::memcpy( buffer + 28, &lfh->extraLength, 2 );
       std::memcpy( buffer + 30, lfh->filename.c_str(), lfh->filenameLength );
-      std::memcpy( buffer + 30 + lfh->filenameLength, lfh->extra.c_str(), lfh->extraLength );
       
+      if ( lfh->extraLength > 0 )
+      {
+        char extraBuffer[lfh->extraLength];
+        lfh->extra->concatenateFields( extraBuffer );
+        std::memcpy( buffer + 30 + lfh->filenameLength, extraBuffer, lfh->extraLength );
+      }
+
       // todo: error handling 
       write( archiveFd, buffer, size );
     }
@@ -313,30 +413,61 @@ class ZipArchive
       std::memcpy( buffer + 28, &cdfh->filenameLength, 2 );
       std::memcpy( buffer + 30, &cdfh->extraLength, 2 );
       std::memcpy( buffer + 32, &cdfh->commentLength, 2 );
-      std::memcpy( buffer + 34, &cdfh->diskNb, 2 );
+      std::memcpy( buffer + 34, &cdfh->nbDisk, 2 );
       std::memcpy( buffer + 36, &cdfh->internAttr, 2 );
       std::memcpy( buffer + 38, &cdfh->externAttr, 4 );
       std::memcpy( buffer + 42, &cdfh->offset, 4 );
       std::memcpy( buffer + 46, cdfh->filename.c_str(), cdfh->filenameLength );
-      std::memcpy( buffer + 46 + cdfh->filenameLength, cdfh->extra.c_str(), cdfh->extraLength );
-      std::memcpy( buffer + 46 + cdfh->filenameLength + cdfh->extraLength, cdfh->comment.c_str(), cdfh->commentLength );
       
+      if ( cdfh->extraLength > 0 )
+      {
+        char extraBuffer[cdfh->extraLength];
+        cdfh->extra->concatenateFields( extraBuffer );
+        std::memcpy( buffer + 46 + cdfh->filenameLength, extraBuffer, cdfh->extraLength );
+      }
+
+      if ( cdfh->commentLength > 0 )
+      {
+        std::memcpy( buffer + 46 + cdfh->filenameLength + cdfh->extraLength, cdfh->comment.c_str(), cdfh->commentLength );
+      }      
+
       // todo: error handling 
       write( archiveFd, buffer, size );
     }
 
     void writeZip64Eocd()
     {
+      //todo: check size type
+      uint32_t size = zip64Eocd->zip64EocdTotalSize;
+      char buffer[size];
+      std::memcpy( buffer, &zip64Eocd->zip64EocdSign, 4 );
+      std::memcpy( buffer + 4, &zip64Eocd->zip64EocdSize, 8 );
+      std::memcpy( buffer + 12, &zip64Eocd->zipVersion, 2 );
+      std::memcpy( buffer + 14, &zip64Eocd->minZipVersion, 2 );
+      std::memcpy( buffer + 16, &zip64Eocd->nbDisk, 4 );
+      std::memcpy( buffer + 20, &zip64Eocd->nbDiskCd, 4 );
+      std::memcpy( buffer + 24, &zip64Eocd->nbCdRecD, 8 );
+      std::memcpy( buffer + 32, &zip64Eocd->nbCdRec, 8 );
+      std::memcpy( buffer + 40, &zip64Eocd->cdSize, 8 );
+      std::memcpy( buffer + 48, &zip64Eocd->cdOffset, 8 );
+
+      if ( zip64Eocd->extensibleDataLength > 0 )
+      {
+        std::memcpy( buffer + 56, zip64Eocd->extensibleData.c_str(), zip64Eocd->extensibleDataLength );
+      }
+
+      // todo: error handling 
+      write( archiveFd, buffer, size );
     }
 
     void writeZip64Eocdl()
     {
-      uint32_t size = zip64Eocdl->zip64EocdlSize;
+      uint16_t size = zip64Eocdl->zip64EocdlSize;
       char buffer[size];
       std::memcpy( buffer, &zip64Eocdl->zip64EocdlSign, 4 );
       std::memcpy( buffer + 4, &zip64Eocdl->nbDiskZip64Eocd, 4 );
       std::memcpy( buffer + 8, &zip64Eocdl->zip64EocdOffset, 8 );
-      std::memcpy( buffer + 16, &zip64Eocdl->totalNbDisks, 4 ;)
+      std::memcpy( buffer + 16, &zip64Eocdl->totalNbDisks, 4 );
 
       // todo: error handling 
       write( archiveFd, buffer, size );
@@ -354,8 +485,12 @@ class ZipArchive
       std::memcpy( buffer + 12, &eocd->cdSize, 4 ); 
       std::memcpy( buffer + 16, &eocd->cdOffset, 4 ); 
       std::memcpy( buffer + 20, &eocd->commentLength, 2 ); 
-      std::memcpy( buffer + 22, eocd->comment.c_str(), eocd->commentLength ); 
       
+      if ( eocd->commentLength > 0 )
+      {
+        std::memcpy( buffer + 22, eocd->comment.c_str(), eocd->commentLength ); 
+      }      
+
       // todo: error handling
       write( archiveFd, buffer, size );
     }
@@ -363,6 +498,7 @@ class ZipArchive
     // only for testing purposes
     void writeFileData()
     {
+      std::cout << "Writing file data...\n";
       int bytes_read;
       int size = 1024;
       char buffer[size];
@@ -372,7 +508,8 @@ class ZipArchive
         bytes_read = read( inputFd, buffer, size );
         write( archiveFd, buffer, bytes_read );
       } 
-      while( bytes_read != 0 ); 
+      while( bytes_read != 0 );
+      std::cout << "Finished writing file data.\n"; 
     }
 
     void closeArchive()
