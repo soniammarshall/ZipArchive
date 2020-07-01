@@ -7,8 +7,10 @@
 #include <stdint.h>
 #include <ctime>
 #include <cstring>
-
+#include <filesystem>
+// todo: remove, it's for the exit function
 #include <cstdlib>
+
 // ZIP64 extended information extra field
 struct ZipExtra
 {
@@ -81,8 +83,6 @@ struct LFH
 {
   LFH( struct stat *fileInfo, std::string filename, uint32_t crc ) 
   {
-    // todo: deal with this for ZIP64
-    minZipVersion = ( 3 << 8 ) | 10 ;
     generalBitFlag = 0;
     compressionMethod = 0;
     ZCRC32 = crc;
@@ -98,6 +98,10 @@ struct LFH
     }
     extra = new ZipExtra( fileInfo->st_size );
     extraLength = extra->totalSize;    
+    if ( extraLength == 0 )
+      minZipVersion = ( 3 << 8 ) | 10 ;
+    else
+      minZipVersion = ( 3 << 8 ) | 45 ;
     // todo: filepath vs filename
     this->filename = filename;
     filenameLength = this->filename.length();
@@ -146,7 +150,6 @@ struct CDFH
   CDFH( struct stat *fileInfo, LFH *lfh )
   {
     zipVersion = ( 3 << 8 ) | 63;
-    minZipVersion = lfh->minZipVersion;
     generalBitFlag = lfh->generalBitFlag;
     compressionMethod = lfh->compressionMethod;
     lastModFileTime = lfh->lastModFileTime;
@@ -159,7 +162,6 @@ struct CDFH
     nbDisk = 0;
     internAttr = 0;
     externAttr = fileInfo->st_mode << 16;
-    // todo: different offset when appending
     uint64_t bigOffset = calculateOffset();
     if ( bigOffset > 4294967295) 
     {
@@ -171,12 +173,16 @@ struct CDFH
     }
     extra = new ZipExtra( lfh->extra, bigOffset );
     extraLength = extra->totalSize;
+    if ( extraLength == 0 )
+      minZipVersion = ( 3 << 8 ) | 10 ;
+    else
+      minZipVersion = ( 3 << 8 ) | 45 ;
     filename = lfh->filename;
     comment = "";
     cdfhSize = cdfhBaseSize + filenameLength + extraLength + commentLength;
   }
 
-  // todo
+  // todo: when appending, offset won't be 0 of course
   uint64_t calculateOffset()
   {
     return 0;
@@ -247,11 +253,20 @@ struct ZIP64_EOCD
 // ZIP64 end of central directory locator
 struct ZIP64_EOCDL
 {
-  ZIP64_EOCDL()
+  ZIP64_EOCDL( EOCD *eocd, ZIP64_EOCD *zip64Eocd )
   {
     nbDiskZip64Eocd = 0;
-    //zip64EocdOffset = ?;
     totalNbDisks = 1;
+
+    if ( eocd->cdOffset == -1 )
+      zip64EocdOffset = zip64Eocd->cdOffset;
+    else 
+      zip64EocdOffset = eocd->cdOffset;
+    
+    if ( eocd->cdSize == -1 )
+      zip64EocdOffset += zip64Eocd->cdSize;
+    else
+      zip64EocdOffset += eocd->cdSize;
   }
   
   uint32_t nbDiskZip64Eocd;
@@ -269,12 +284,19 @@ struct EOCD
   {
     nbDisk = 0;
     nbDiskCd = 0;
-    // todo: different when appending
-    // todo: deal with this for ZIP64
+    // todo: change for when appending a file
     nbCdRecD = 1;
     nbCdRec = 1;
     cdSize = cdfh->cdfhSize;
-    cdOffset = lfh->lfhSize + lfh->compressedSize;
+    if ( lfh->compressedSize == -1 || lfh->lfhSize + lfh->compressedSize > 4294967295 )
+    {
+      cdOffset = -1;
+      useZip64 = true;
+    }
+    else
+    {
+      cdOffset = lfh->lfhSize + lfh->compressedSize;
+    }
     commentLength = 0;
     comment = "";
     eocdSize = eocdBaseSize + commentLength;
@@ -340,7 +362,7 @@ class ZipArchive
       if ( useZip64 )
       {
         zip64Eocd = new ZIP64_EOCD();
-        zip64Eocdl = new ZIP64_EOCDL();
+        zip64Eocdl = new ZIP64_EOCDL( eocd, zip64Eocd  );
       }
     }
 
