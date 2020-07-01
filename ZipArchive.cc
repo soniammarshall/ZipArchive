@@ -48,9 +48,7 @@ struct ZipExtra
       totalSize = dataSize + 4;
     }
     else
-    {
       this->offset = 0;
-    }
   }
  
   void concatenateFields( char *buffer )
@@ -60,13 +58,9 @@ struct ZipExtra
     std::memcpy( buffer + 4, &uncompressedSize, 8 );
     std::memcpy( buffer + 12, &compressedSize, 8 );
     if ( totalSize >= 28 )
-    {
       std::memcpy( buffer + 20, &offset, 8 );
-    }
     if ( totalSize >= 32 )
-    {
       std::memcpy( buffer + 28, &nbDisk, 4 );
-    }
   }
  
   static const uint16_t headerID = 0x0001;
@@ -164,13 +158,9 @@ struct CDFH
     externAttr = fileInfo->st_mode << 16;
     uint64_t bigOffset = calculateOffset();
     if ( bigOffset > 4294967295) 
-    {
       offset = -1;
-    }
     else
-    {
       offset = bigOffset;     
-    }
     extra = new ZipExtra( lfh->extra, bigOffset );
     extraLength = extra->totalSize;
     if ( extraLength == 0 )
@@ -294,9 +284,7 @@ struct EOCD
       useZip64 = true;
     }
     else
-    {
       cdOffset = lfh->lfhSize + lfh->compressedSize;
-    }
     commentLength = 0;
     comment = "";
     eocdSize = eocdBaseSize + commentLength;
@@ -438,9 +426,7 @@ class ZipArchive
       }
 
       if ( cdfh->commentLength > 0 )
-      {
         std::memcpy( buffer + 46 + cdfh->filenameLength + cdfh->extraLength, cdfh->comment.c_str(), cdfh->commentLength );
-      }      
 
       // todo: error handling 
       write( archiveFd, buffer, size );
@@ -463,9 +449,7 @@ class ZipArchive
       std::memcpy( buffer + 48, &zip64Eocd->cdOffset, 8 );
 
       if ( zip64Eocd->extensibleDataLength > 0 )
-      {
         std::memcpy( buffer + 56, zip64Eocd->extensibleData.c_str(), zip64Eocd->extensibleDataLength );
-      }
 
       // todo: error handling 
       write( archiveFd, buffer, size );
@@ -498,9 +482,7 @@ class ZipArchive
       std::memcpy( buffer + 20, &eocd->commentLength, 2 ); 
       
       if ( eocd->commentLength > 0 )
-      {
         std::memcpy( buffer + 22, eocd->comment.c_str(), eocd->commentLength ); 
-      }      
 
       // todo: error handling
       write( archiveFd, buffer, size );
@@ -557,9 +539,8 @@ int main( int argc, char **argv )
     archiveFilename = argv[2];
   }
   else 
-  {
     std::cout << "No args given, using defaults.\n";
-  }
+
   std::cout << "Input file: " << inputFilename << "\n";
   std::cout << "Output file: " << archiveFilename << "\n";
   std::cout << "crc: " << std::hex << crc << "\n"; 
