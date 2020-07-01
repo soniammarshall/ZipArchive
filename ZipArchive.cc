@@ -32,13 +32,13 @@ struct ZipExtra
     }
   }
 
-  ZipExtra( LFH *lfh, uint64_t offset )
+  ZipExtra( ZipExtra *extra, uint64_t offset )
   {
     nbDisk = 0;
-    uncompressedSize = lfh->extra->uncompressedSize;
-    compressedSize = lfh->extra->compressedSize;
-    dataSize = lfh->extra->dataSize;
-    totalSize = lfh->extra->totalSize;
+    uncompressedSize = extra->uncompressedSize;
+    compressedSize = extra->compressedSize;
+    dataSize = extra->dataSize;
+    totalSize = extra->totalSize;
     if ( offset > 4294967295 )
     {
       this->offset = offset;
@@ -57,7 +57,7 @@ struct ZipExtra
     std::memcpy( buffer + 2, &dataSize, 2 );
     std::memcpy( buffer + 4, &uncompressedSize, 8 );
     std::memcpy( buffer + 12, &compressedSize, 8 );
-    if ( totalSize >= 24 )
+    if ( totalSize >= 28 )
     {
       std::memcpy( buffer + 20, &offset, 8 );
     }
@@ -169,7 +169,7 @@ struct CDFH
     {
       offset = bigOffset;     
     }
-    extra = new ZipExtra( lfh, bigOffset );
+    extra = new ZipExtra( lfh->extra, bigOffset );
     extraLength = extra->totalSize;
     filename = lfh->filename;
     comment = "";
