@@ -12,42 +12,43 @@
 // ZIP64 extended information extra field
 struct ZipExtra
 {
-  ZipExtra()
-  {
-    dataSize = 0;
-    uncompressedSize = 0;
-    compressedSize = 0;
-    offset = 0;
-    nbDisk = 0;
-    totalSize = 0;
-  }
-
   ZipExtra( uint64_t fileSize )
   {
-    dataSize = 16;
-    uncompressedSize = fileSize;
-    compressedSize = fileSize;
     offset = 0;
     nbDisk = 0;
-    totalSize = dataSize + 4;
-  }
-
-  ZipExtra( uint64_t fileSize, uint64_t offset, bool includeSize )
-  {
-    dataSize = 24;
-    if ( includeSize )
+    if ( fileSize > 4294967295 )
     {
+      dataSize = 16;
       uncompressedSize = fileSize;
       compressedSize = fileSize;
+      totalSize = dataSize + 4;
+    }
+    else 
+    {
+      dataSize = 0;
+      uncompressedSize = 0;
+      compressedSize = 0;
+      totalSize = 0;
+    }
+  }
+
+  ZipExtra( LFH *lfh, uint64_t offset )
+  {
+    nbDisk = 0;
+    uncompressedSize = lfh->extra->uncompressedSize;
+    compressedSize = lfh->extra->compressedSize;
+    dataSize = lfh->extra->dataSize;
+    totalSize = lfh->extra->totalSize;
+    if ( offset > 4294967295 )
+    {
+      this->offset = offset;
+      dataSize = 24;
+      totalSize = dataSize + 4;
     }
     else
     {
-      uncompressedSize = 0;
-      compressedSize = 0;
+      this->offset = 0;
     }
-    this->offset = offset;
-    nbDisk = 0;
-    totalSize = dataSize + 4;
   }
  
   void concatenateFields( char *buffer )
@@ -89,14 +90,13 @@ struct LFH
     {
       compressedSize = -1;
       uncompressedSize = -1;
-      extra = new ZipExtra( fileInfo->st_size );
     }
     else
     {
       compressedSize = fileInfo->st_size;
       uncompressedSize = fileInfo->st_size;
-      extra = new ZipExtra();
     }
+    extra = new ZipExtra( fileInfo->st_size );
     extraLength = extra->totalSize;    
     // todo: filepath vs filename
     this->filename = filename;
@@ -160,37 +160,26 @@ struct CDFH
     internAttr = 0;
     externAttr = fileInfo->st_mode << 16;
     // todo: different offset when appending
-    offset = 0;
-    if ( offset > 4294967295) 
+    uint64_t bigOffset = calculateOffset();
+    if ( bigOffset > 4294967295) 
     {
       offset = -1;
-      bool includeSize;
-      if ( uncompressedSize == -1 )
-      {
-        includeSize = true;
-        extra = new ZipExtra( lfh->extra->uncompressedSize, offset, includeSize );
-      }
-      else
-      {
-        includeSize = false;
-        extra = new ZipExtra( uncompressedSize, offset, includeSize );
-      }
     }
     else
-    {     
-      if ( uncompressedSize == -1 )
-      {
-        extra = new ZipExtra( lfh->extra->uncompressedSize )
-      }
-      else
-      {
-        extra = new ZipExtra();
-      }
+    {
+      offset = bigOffset;     
     }
+    extra = new ZipExtra( lfh, bigOffset );
     extraLength = extra->totalSize;
     filename = lfh->filename;
     comment = "";
     cdfhSize = cdfhBaseSize + filenameLength + extraLength + commentLength;
+  }
+
+  // todo
+  uint64_t calculateOffset()
+  {
+    return 0;
   }
   
   uint16_t zipVersion;
