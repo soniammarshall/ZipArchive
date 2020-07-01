@@ -7,7 +7,6 @@
 #include <stdint.h>
 #include <ctime>
 #include <cstring>
-#include <filesystem>
 // todo: remove, it's for the exit function
 #include <cstdlib>
 
@@ -157,7 +156,7 @@ struct CDFH
     internAttr = 0;
     externAttr = fileInfo->st_mode << 16;
     uint64_t bigOffset = calculateOffset();
-    if ( bigOffset > 4294967295) 
+    if ( bigOffset > 4294967295 ) 
       offset = -1;
     else
       offset = bigOffset;     
@@ -203,23 +202,72 @@ struct CDFH
   static const uint32_t cdfhSign = 0x02014b50;
 };
 
+// end of central directory record
+struct EOCD
+{
+  EOCD(LFH *lfh, CDFH *cdfh )
+  {
+    useZip64 = false;
+    nbDisk = 0;
+    nbDiskCd = 0;
+    // todo: change for when appending a file
+    nbCdRecD = 1;
+    nbCdRec = 1;
+    cdSize = cdfh->cdfhSize;
+    if ( lfh->compressedSize == -1 || lfh->lfhSize + lfh->compressedSize > 4294967295 )
+    {
+      cdOffset = -1;
+      useZip64 = true;
+    }
+    else
+      cdOffset = lfh->lfhSize + lfh->compressedSize;
+    commentLength = 0;
+    comment = "";
+    eocdSize = eocdBaseSize + commentLength;
+  }
+
+  uint16_t nbDisk;
+  uint16_t nbDiskCd;
+  uint16_t nbCdRecD;
+  uint16_t nbCdRec;
+  uint32_t cdSize;
+  uint32_t cdOffset;
+  uint16_t commentLength;
+  std::string comment;
+  uint32_t eocdSize;
+  bool useZip64;
+
+  static const uint16_t eocdBaseSize = 22;
+  static const uint32_t eocdSign = 0x06054b50;
+  // todo: store max size??
+};
+
 // ZIP64 end of central directory record
 struct ZIP64_EOCD
 {
-  ZIP64_EOCD()
+  ZIP64_EOCD( EOCD *eocd, LFH *lfh )
   {
-    //zip64EocdSize = ?;
-    //zipVersion = ?;
-    //minZipVersion ?;
+    zipVersion = ( 3 << 8 ) | 63;
+    minZipVersion = ( 3 << 8 ) | 45;
     nbDisk = 0;
     nbDiskCd = 0;
-    //nbCdRecD = ?;
-    //nbCdRec = ?;
-    //cdSize = ?;
-    //cdOffset = ?;
+    // todo: change for when appending a file
+    nbCdRecD = 0;
+    nbCdRec = 0;
+    cdSize = 0;
+    if ( eocd->cdOffset == -1 )
+    {
+      if ( lfh->compressedSize == -1 )
+        cdOffset = lfh->lfhSize + lfh->extra->compressedSize;
+      else
+        cdOffset = lfh->lfhSize + lfh->compressedSize;
+    }
+    else
+      cdOffset = 0;
     extensibleData = "";
     extensibleDataLength = 0;
-    //zip64EocdTotalSize = ?;
+    zip64EocdSize = zip64EocdBaseSize + extensibleDataLength - 12;
+    zip64EocdTotalSize = zip64EocdBaseSize + extensibleDataLength;
   }
   
   uint64_t zip64EocdSize;
@@ -267,44 +315,6 @@ struct ZIP64_EOCDL
   static const uint32_t zip64EocdlSign = 0x07064b50;
 };
 
-// end of central directory record
-struct EOCD
-{
-  EOCD(LFH *lfh, CDFH *cdfh )
-  {
-    nbDisk = 0;
-    nbDiskCd = 0;
-    // todo: change for when appending a file
-    nbCdRecD = 1;
-    nbCdRec = 1;
-    cdSize = cdfh->cdfhSize;
-    if ( lfh->compressedSize == -1 || lfh->lfhSize + lfh->compressedSize > 4294967295 )
-    {
-      cdOffset = -1;
-      useZip64 = true;
-    }
-    else
-      cdOffset = lfh->lfhSize + lfh->compressedSize;
-    commentLength = 0;
-    comment = "";
-    eocdSize = eocdBaseSize + commentLength;
-  }
-
-  uint16_t nbDisk;
-  uint16_t nbDiskCd;
-  uint16_t nbCdRecD;
-  uint16_t nbCdRec;
-  uint32_t cdSize;
-  uint32_t cdOffset;
-  uint16_t commentLength;
-  std::string comment;
-  uint32_t eocdSize;
-
-  static const uint16_t eocdBaseSize = 22;
-  static const uint32_t eocdSign = 0x06054b50;
-  // todo: store max size??
-};
-
 class ZipArchive
 {
   public:
@@ -314,7 +324,6 @@ class ZipArchive
       this->inputFilename = inputFilename;
       this->archiveFilename = archiveFilename;
       this->crc = crc;
-      useZip64 = false;
     }
     
     void openArchive()
@@ -347,10 +356,10 @@ class ZipArchive
       lfh = new LFH( &fileInfo, inputFilename, crc );
       cdfh = new CDFH( &fileInfo, lfh );
       eocd = new EOCD( lfh, cdfh );
-      if ( useZip64 )
+      if ( eocd->useZip64 )
       {
-        zip64Eocd = new ZIP64_EOCD();
-        zip64Eocdl = new ZIP64_EOCDL( eocd, zip64Eocd  );
+        zip64Eocd = new ZIP64_EOCD( eocd, lfh );
+        zip64Eocdl = new ZIP64_EOCDL( eocd, zip64Eocd );
       }
     }
 
@@ -359,9 +368,11 @@ class ZipArchive
       writeLfh();
       writeFileData();
       writeCdfh();
-      if ( useZip64 )
+      if ( eocd->useZip64 )
       {
+        std::cout << "Writing ZIP64 EOCD.\n";
         writeZip64Eocd();
+        std::cout << "Writing ZIP64 EOCDL.\n";
         writeZip64Eocdl();
       }
       writeEocd();
@@ -392,7 +403,8 @@ class ZipArchive
       }
 
       // todo: error handling 
-      write( archiveFd, buffer, size );
+      uint32_t bytes_written = write( archiveFd, buffer, size );
+      std::cout << "LFH bytes written: " << std::hex << bytes_written << "\n";
     }
 
     void writeCdfh()
@@ -429,13 +441,15 @@ class ZipArchive
         std::memcpy( buffer + 46 + cdfh->filenameLength + cdfh->extraLength, cdfh->comment.c_str(), cdfh->commentLength );
 
       // todo: error handling 
-      write( archiveFd, buffer, size );
+      uint32_t bytes_written = write( archiveFd, buffer, size );
+      std::cout << "CDFH bytes written: " << std::hex << bytes_written << "\n";
     }
 
     void writeZip64Eocd()
     {
       //todo: check size type
       uint32_t size = zip64Eocd->zip64EocdTotalSize;
+      std::cout << "size of ZIP64 EOCD buffer: " << std::hex << size <<"\n";
       char buffer[size];
       std::memcpy( buffer, &zip64Eocd->zip64EocdSign, 4 );
       std::memcpy( buffer + 4, &zip64Eocd->zip64EocdSize, 8 );
@@ -452,12 +466,14 @@ class ZipArchive
         std::memcpy( buffer + 56, zip64Eocd->extensibleData.c_str(), zip64Eocd->extensibleDataLength );
 
       // todo: error handling 
-      write( archiveFd, buffer, size );
+      uint32_t bytes_written = write( archiveFd, buffer, size );
+      std::cout << "ZIP64 EOCD bytes written: " << std::hex << bytes_written << "\n";
     }
 
     void writeZip64Eocdl()
     {
       uint16_t size = zip64Eocdl->zip64EocdlSize;
+      std::cout << "size of ZIP64 EOCDL buffer: " << std::hex << size <<"\n";
       char buffer[size];
       std::memcpy( buffer, &zip64Eocdl->zip64EocdlSign, 4 );
       std::memcpy( buffer + 4, &zip64Eocdl->nbDiskZip64Eocd, 4 );
@@ -465,7 +481,8 @@ class ZipArchive
       std::memcpy( buffer + 16, &zip64Eocdl->totalNbDisks, 4 );
 
       // todo: error handling 
-      write( archiveFd, buffer, size );
+      uint32_t bytes_written = write( archiveFd, buffer, size );
+      std::cout << "ZIP64 EOCDL bytes written: " << std::hex << bytes_written << "\n";
     }
 
     void writeEocd()
@@ -485,7 +502,8 @@ class ZipArchive
         std::memcpy( buffer + 22, eocd->comment.c_str(), eocd->commentLength ); 
 
       // todo: error handling
-      write( archiveFd, buffer, size );
+      uint32_t bytes_written = write( archiveFd, buffer, size );
+      std::cout << "EOCD bytes written: " << std::hex << bytes_written << "\n";
     }
     
     // only for testing purposes
@@ -493,16 +511,19 @@ class ZipArchive
     {
       std::cout << "Writing file data...\n";
       int bytes_read;
-      int size = 1024;
+      int size = 10240;
       char buffer[size];
+      uint64_t total_bytes = 0;
       do
       {
         // todo: error handling for read and write
         bytes_read = read( inputFd, buffer, size );
         write( archiveFd, buffer, bytes_read );
+        total_bytes += bytes_read;
       } 
       while( bytes_read != 0 );
       std::cout << "Finished writing file data.\n"; 
+      std::cout << "File data written: " << std::hex << total_bytes << "\n";
     }
 
     void closeArchive()
@@ -510,6 +531,20 @@ class ZipArchive
       // todo: error handling
       close( inputFd );
       close ( archiveFd );
+    }
+
+    void printValues()
+    {
+      std::cout << std::hex << "LFH size: " << lfh->lfhSize << "\n";
+      std::cout << std::hex << "file size: " << lfh->compressedSize << "\n";
+      std::cout << std::hex << "extra file size: " << lfh->extra->compressedSize << "\n";
+      std::cout << std::hex << "CDFH size: " << cdfh->cdfhSize << "\n";
+      std::cout << std::hex << "EOCD cdSize: " << eocd->cdSize << "\n";
+      std::cout << std::hex << "ZIP64 EOCD cdSize: " << zip64Eocd->cdSize << "\n";
+      std::cout << std::hex << "EOCD cdOffset: " << eocd->cdOffset << "\n";
+      std::cout << std::hex << "ZIP64 EOCD cdOffset: " << zip64Eocd->cdOffset << "\n";
+      std::cout << std::hex << "ZIP64 EOCDL zip64EocdOffset: " << zip64Eocdl->zip64EocdOffset << "\n";
+      std::cout << "useZip64: " << eocd->useZip64 << "\n";
     }
  
   private:
@@ -523,7 +558,6 @@ class ZipArchive
     ZIP64_EOCD *zip64Eocd;
     ZIP64_EOCDL *zip64Eocdl;
     uint32_t crc;
-    bool useZip64;
 };
 
 // run as ./ZipArchive <input filename> <output filename>
@@ -550,6 +584,7 @@ int main( int argc, char **argv )
   archive->constructHeaders();
   archive->writeArchive();
   archive->closeArchive();
+  archive->printValues();
 }
 
  
