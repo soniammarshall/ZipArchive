@@ -569,8 +569,10 @@ int main( int argc, char **argv )
 {
   std::string inputFilename = "file.txt";
   std::string archiveFilename = "archive.zip"; 
-  // this crc matches exactly my test file.txt
-  uint32_t crc = 0x797b4b0e;
+  // uncomment crc when zipping file.txt
+  //uint32_t crc = 0x797b4b0e;
+  // uncomment crc when zipping 4GB.dat
+  uint32_t crc = 0x756db3ac;
   if (argc >= 3)
   {
     inputFilename = argv[1];
