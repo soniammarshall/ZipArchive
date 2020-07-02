@@ -250,12 +250,12 @@ struct ZIP64_EOCD
   {
     zipVersion = ( 3 << 8 ) | 63;
     minZipVersion = 45;
-    nbDisk = 0;
-    nbDiskCd = 0;
+    nbDisk = eocd->nbDisk;
+    nbDiskCd = eocd->nbDiskCd;
     // todo: change for when appending a file
-    nbCdRecD = 0;
-    nbCdRec = 0;
-    cdSize = 0;
+    nbCdRecD = eocd->nbCdRecD;
+    nbCdRec = eocd->nbCdRec;
+    cdSize = eocd->cdSize;
     if ( eocd->cdOffset == -1 )
     {
       if ( lfh->compressedSize == -1 )
@@ -264,7 +264,7 @@ struct ZIP64_EOCD
         cdOffset = lfh->lfhSize + lfh->compressedSize;
     }
     else
-      cdOffset = 0;
+      cdOffset = eocd->cdOffset;
     extensibleData = "";
     extensibleDataLength = 0;
     zip64EocdSize = zip64EocdBaseSize + extensibleDataLength - 12;
