@@ -81,8 +81,8 @@ struct LFH
     ZCRC32 = crc;
     if ( fileInfo->st_size > ovrflw32 ) 
     {
-      compressedSize = -1;
-      uncompressedSize = -1;
+      compressedSize = ovrflw32;
+      uncompressedSize = ovrflw32;
     }
     else
     {
@@ -157,7 +157,7 @@ struct CDFH
     externAttr = fileInfo->st_mode << 16;
     uint64_t bigOffset = calculateOffset();
     if ( bigOffset > ovrflw32 ) 
-      offset = -1;
+      offset = ovrflw32;
     else
       offset = bigOffset;     
     extra = new ZipExtra( lfh->extra, bigOffset );
@@ -214,9 +214,9 @@ struct EOCD
     nbCdRecD = 1;
     nbCdRec = 1;
     cdSize = cdfh->cdfhSize;
-    if ( lfh->compressedSize == -1 || lfh->lfhSize + lfh->compressedSize > ovrflw32 )
+    if ( lfh->compressedSize == ovrflw32 || lfh->lfhSize + lfh->compressedSize > ovrflw32 )
     {
-      cdOffset = -1;
+      cdOffset = ovrflw32;
       useZip64 = true;
     }
     else
@@ -255,9 +255,9 @@ struct ZIP64_EOCD
     nbCdRecD = eocd->nbCdRecD;
     nbCdRec = eocd->nbCdRec;
     cdSize = eocd->cdSize;
-    if ( eocd->cdOffset == -1 )
+    if ( eocd->cdOffset == ovrflw32 )
     {
-      if ( lfh->compressedSize == -1 )
+      if ( lfh->compressedSize == ovrflw32 )
         cdOffset = lfh->lfhSize + lfh->extra->compressedSize;
       else
         cdOffset = lfh->lfhSize + lfh->compressedSize;
@@ -295,12 +295,12 @@ struct ZIP64_EOCDL
     nbDiskZip64Eocd = 0;
     totalNbDisks = 1;
 
-    if ( eocd->cdOffset == -1 )
+    if ( eocd->cdOffset == ovrflw32 )
       zip64EocdOffset = zip64Eocd->cdOffset;
     else 
       zip64EocdOffset = eocd->cdOffset;
     
-    if ( eocd->cdSize == -1 )
+    if ( eocd->cdSize == ovrflw32 )
       zip64EocdOffset += zip64Eocd->cdSize;
     else
       zip64EocdOffset += eocd->cdSize;
