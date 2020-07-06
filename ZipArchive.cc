@@ -99,15 +99,15 @@ struct LFH
     this->filename = filename;
     filenameLength = this->filename.length();
     
-    SetDateTime( fileInfo );
+    MsdosDateTime( &fileInfo->st_mtime );
 
     lfhSize = lfhBaseSize + filenameLength + extraLength;
   }
   
-  void SetDateTime( struct stat *fileInfo )
+  void MsdosDateTime( time_t *originalTime )
   {
     // convert from Epoch time to local time
-    struct tm *t = localtime( &fileInfo->st_mtime );
+    struct tm *t = localtime( originalTime );
     // convert to MS-DOS time format
     uint16_t hour = t->tm_hour;
     uint16_t min = t->tm_min;
