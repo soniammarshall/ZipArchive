@@ -8,6 +8,8 @@
 #include <ctime>
 #include <cstring>
 
+const uint32_t ovrflw32 = 0xffffffff;
+
 // ZIP64 extended information extra field
 struct ZipExtra
 {
@@ -15,7 +17,7 @@ struct ZipExtra
   {
     offset = 0;
     nbDisk = 0;
-    if ( fileSize > 4294967295 )
+    if ( fileSize > ovrflw32 )
     {
       dataSize = 16;
       uncompressedSize = fileSize;
@@ -38,7 +40,7 @@ struct ZipExtra
     compressedSize = extra->compressedSize;
     dataSize = extra->dataSize;
     totalSize = extra->totalSize;
-    if ( offset > 4294967295 )
+    if ( offset > ovrflw32 )
     {
       this->offset = offset;
       dataSize = 24;
@@ -77,7 +79,7 @@ struct LFH
     generalBitFlag = 0;
     compressionMethod = 0;
     ZCRC32 = crc;
-    if ( fileInfo->st_size > 4294967295 ) 
+    if ( fileInfo->st_size > ovrflw32 ) 
     {
       compressedSize = -1;
       uncompressedSize = -1;
@@ -131,7 +133,7 @@ struct LFH
   ZipExtra *extra;
   uint32_t lfhSize;
   
-  static const uint32_t lfhBaseSize = 30;
+  static const uint16_t lfhBaseSize = 30;
   static const uint32_t lfhSign = 0x04034b50;
 };
 
@@ -154,7 +156,7 @@ struct CDFH
     internAttr = 0;
     externAttr = fileInfo->st_mode << 16;
     uint64_t bigOffset = calculateOffset();
-    if ( bigOffset > 4294967295 ) 
+    if ( bigOffset > ovrflw32 ) 
       offset = -1;
     else
       offset = bigOffset;     
@@ -196,7 +198,7 @@ struct CDFH
   std::string comment;
   uint32_t cdfhSize;
  
-  static const uint32_t cdfhBaseSize = 46;
+  static const uint16_t cdfhBaseSize = 46;
   static const uint32_t cdfhSign = 0x02014b50;
 };
 
@@ -212,7 +214,7 @@ struct EOCD
     nbCdRecD = 1;
     nbCdRec = 1;
     cdSize = cdfh->cdfhSize;
-    if ( lfh->compressedSize == -1 || lfh->lfhSize + lfh->compressedSize > 4294967295 )
+    if ( lfh->compressedSize == -1 || lfh->lfhSize + lfh->compressedSize > ovrflw32 )
     {
       cdOffset = -1;
       useZip64 = true;
@@ -279,10 +281,9 @@ struct ZIP64_EOCD
   uint64_t cdOffset;
   std::string extensibleData;
   uint16_t extensibleDataLength;
-  // todo: decide if right type
   uint64_t zip64EocdTotalSize;
 
-  static const uint32_t zip64EocdBaseSize = 56;
+  static const uint16_t zip64EocdBaseSize = 56;
   static const uint32_t zip64EocdSign = 0x06064b50;
 };
 
@@ -441,8 +442,7 @@ class ZipArchive
 
     void writeZip64Eocd()
     {
-      //todo: check size type
-      uint32_t size = zip64Eocd->zip64EocdTotalSize;
+      uint64_t size = zip64Eocd->zip64EocdTotalSize;
       char buffer[size];
       std::memcpy( buffer, &zip64Eocd->zip64EocdSign, 4 );
       std::memcpy( buffer + 4, &zip64Eocd->zip64EocdSize, 8 );
