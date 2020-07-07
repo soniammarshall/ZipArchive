@@ -141,7 +141,7 @@ struct LFH
 // central directory file header
 struct CDFH
 {
-  CDFH( struct stat *fileInfo, LFH *lfh )
+  CDFH( struct stat *fileInfo, LFH *lfh, uint64_t lfhOffset )
   {
     zipVersion = ( 3 << 8 ) | 63;
     generalBitFlag = lfh->generalBitFlag;
@@ -156,12 +156,11 @@ struct CDFH
     nbDisk = 0;
     internAttr = 0;
     externAttr = fileInfo->st_mode << 16;
-    uint64_t bigOffset = calculateOffset();
-    if ( bigOffset > ovrflw32 ) 
+    if ( lfhOffset > ovrflw32 ) 
       offset = ovrflw32;
     else
-      offset = bigOffset;     
-    extra = new ZipExtra( lfh->extra, bigOffset );
+      offset = lfhOffset;     
+    extra = new ZipExtra( lfh->extra, lfhOffset );
     extraLength = extra->totalSize;
     if ( extraLength == 0 )
       minZipVersion = 10;
@@ -172,12 +171,6 @@ struct CDFH
     cdfhSize = cdfhBaseSize + filenameLength + extraLength + commentLength;
   }
 
-  // todo: when appending, offset won't be 0 of course
-  uint64_t calculateOffset()
-  {
-    return 0;
-  }
-  
   uint16_t zipVersion;
   uint16_t minZipVersion;
   uint16_t generalBitFlag;
@@ -206,12 +199,29 @@ struct CDFH
 // end of central directory record
 struct EOCD
 {
+  // constructor used when appending to existing ZIP archive
+  EOCD( const char *buffer )
+  {
+    nbDisk        = *reinterpret_cast<const uint16_t*>( buffer + 4 );
+    nbDiskCd      = *reinterpret_cast<const uint16_t*>( buffer + 6 );
+    nbCdRecD      = *reinterpret_cast<const uint16_t*>( buffer + 8 );
+    nbCdRec       = *reinterpret_cast<const uint16_t*>( buffer + 10 );
+    cdSize        = *reinterpret_cast<const uint32_t*>( buffer + 12 );
+    cdOffset      = *reinterpret_cast<const uint32_t*>( buffer + 16 );
+    commentLength = *reinterpret_cast<const uint16_t*>( buffer + 20 );
+    comment       = std::string( buffer + 22, commentLength );
+
+    eocdSize = eocdBaseSize + commentLength;
+    // todo: change this for ZIP64
+    useZip64= false;
+  }
+
+  // constructor used when creating new ZIP archive
   EOCD(LFH *lfh, CDFH *cdfh )
   {
     useZip64 = false;
     nbDisk = 0;
     nbDiskCd = 0;
-    // todo: change for when appending a file
     nbCdRecD = 1;
     nbCdRec = 1;
     cdSize = cdfh->cdfhSize;
@@ -347,7 +357,8 @@ class ZipArchive
         }
       }
       // else file exists, so we must be appending to existing ZIP archive
-    
+      std::cout << "Appending: " << appending << "\n";
+          
       // open input file for reading
       inputFd = open( inputFilename.c_str(), O_RDONLY );
       if ( inputFd == -1 )
@@ -359,6 +370,32 @@ class ZipArchive
     
     void constructHeaders()
     {
+      if ( appending )
+      {
+        struct stat zipInfo;
+        if ( fstat( archiveFd, &zipInfo ) == -1 )
+        {
+          // todo: proper error handling
+          std::cout << "Could not stat " << archiveFilename << "\n";
+        }
+        // find EOCD in ZIP archive
+        char *eocdBlock = LookForEocd( zipInfo->st_size );
+        // todo: proper error handling 
+        if ( !eocdBlock )
+          std::cout << "Could not find the EOCD signature.\n";
+        eocd = new EOCD( eocdBlock ) ;
+
+        // todo: adapt for ZIP64
+        // read and store existing central directory
+        uint64_t existingCdSize = eocd->cdSize;
+        uint64_t offset = eocd->cdOffset;
+        char buffer[existingCdSize];
+        // todo: error handling
+        lseek( archiveFd, offset, SEEK_SET );
+        read( archiveFd, buffer, existingCdSize );
+        existingCd = std::string( buffer, existingCdSize );
+      }
+      
       struct stat fileInfo;
       if ( fstat( inputFd, &fileInfo ) == -1 )
       {
@@ -367,8 +404,22 @@ class ZipArchive
       }
       
       lfh = new LFH( &fileInfo, inputFilename, crc );
-      cdfh = new CDFH( &fileInfo, lfh );
-      eocd = new EOCD( lfh, cdfh );
+      // todo: ZIP64 argument may need to be offset from ZIP64 EOCD
+      if ( appending )
+      {
+        cdfh = new CDFH( &fileInfo, lfh, eocd->cdOffset );
+        eocd->nbCdRecD += 1;
+        eocd->nbCdRec += 1;
+        // todo: deal with this for ZIP64
+        eocd->cdSize += cdfh->cdfhSize;
+        eocd->cdOffset += lfh->lfhSize + lfh->compressedSize;
+      }
+      else
+      {
+        cdfh = new CDFH( &fileInfo, lfh, 0 );
+        eocd = new EOCD( lfh, cdfh );
+      }
+
       if ( eocd->useZip64 )
       {
         zip64Eocd = new ZIP64_EOCD( eocd, lfh );
@@ -376,10 +427,23 @@ class ZipArchive
       }
     }
 
+    char* LookForEocd( uint64_t size )
+    {
+      // todo: implement
+      return 0;
+    }
+
     void writeArchive()
     {
+      if ( appending )
+      {
+        lseek( archiveFd, cdfh->offset, SEEK_SET );
+        // todo: error handling
+      }
       writeLfh();
       writeFileData();
+      if ( appending )
+        writeExistingCd();
       writeCdfh();
       if ( eocd->useZip64 )
       {
@@ -414,7 +478,13 @@ class ZipArchive
       }
 
       // todo: error handling 
-      uint32_t bytes_written = write( archiveFd, buffer, size );
+      write( archiveFd, buffer, size );
+    }
+
+    void writeExistingCd()
+    {
+      // todo: error handling
+      write( archiveFd, existingCd.c_str(), existingCd.length() );
     }
 
     void writeCdfh()
@@ -451,7 +521,7 @@ class ZipArchive
         std::memcpy( buffer + 46 + cdfh->filenameLength + cdfh->extraLength, cdfh->comment.c_str(), cdfh->commentLength );
 
       // todo: error handling 
-      uint32_t bytes_written = write( archiveFd, buffer, size );
+      write( archiveFd, buffer, size );
     }
 
     void writeZip64Eocd()
@@ -473,7 +543,7 @@ class ZipArchive
         std::memcpy( buffer + 56, zip64Eocd->extensibleData.c_str(), zip64Eocd->extensibleDataLength );
 
       // todo: error handling 
-      uint32_t bytes_written = write( archiveFd, buffer, size );
+      write( archiveFd, buffer, size );
     }
 
     void writeZip64Eocdl()
@@ -486,7 +556,7 @@ class ZipArchive
       std::memcpy( buffer + 16, &zip64Eocdl->totalNbDisks, 4 );
 
       // todo: error handling 
-      uint32_t bytes_written = write( archiveFd, buffer, size );
+      write( archiveFd, buffer, size );
     }
 
     void writeEocd()
@@ -506,7 +576,7 @@ class ZipArchive
         std::memcpy( buffer + 22, eocd->comment.c_str(), eocd->commentLength ); 
 
       // todo: error handling
-      uint32_t bytes_written = write( archiveFd, buffer, size );
+      write( archiveFd, buffer, size );
     }
     
     // only for testing purposes
@@ -548,6 +618,8 @@ class ZipArchive
     ZIP64_EOCDL *zip64Eocdl;
     uint32_t crc;
     bool appending;
+    std::string existingCd;
+
 };
 
 // run as ./ZipArchive <input filename> <output filename>
