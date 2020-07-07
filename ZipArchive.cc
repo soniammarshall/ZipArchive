@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <ctime>
 #include <cstring>
+#include <errno.h>
 
 const uint32_t ovrflw32 = 0xffffffff;
 
@@ -323,18 +324,31 @@ class ZipArchive
       this->inputFilename = inputFilename;
       this->archiveFilename = archiveFilename;
       this->crc = crc;
+      appending = true;
     }
     
     void openArchive()
     {
-      // file permissions: 644
-      archiveFd = open( archiveFilename.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
+      // open archive file for reading and writing and with file permissions 644
+      archiveFd = open( archiveFilename.c_str(), O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
       if ( archiveFd == -1 )
       {
-        // todo: proper error handling
-        std::cout << "Could not open " << archiveFilename << "\n";  
+        if ( errno == ENOENT ) 
+        {
+          // file doesn't exist, so must be creating ZIP archive from scratch
+          archiveFd = open( archiveFilename.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
+          // todo: error handling
+          appending = false;
+        }
+        else
+        {
+          // todo: proper error handling
+          std::cout << "Could not open " << archiveFilename << "\n";  
+        }
       }
+      // else file exists, so we must be appending to existing ZIP archive
     
+      // open input file for reading
       inputFd = open( inputFilename.c_str(), O_RDONLY );
       if ( inputFd == -1 )
       {
@@ -533,6 +547,7 @@ class ZipArchive
     ZIP64_EOCD *zip64Eocd;
     ZIP64_EOCDL *zip64Eocdl;
     uint32_t crc;
+    bool appending;
 };
 
 // run as ./ZipArchive <input filename> <output filename>
