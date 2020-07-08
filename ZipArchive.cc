@@ -250,7 +250,7 @@ struct EOCD
 
   static const uint16_t eocdBaseSize = 22;
   static const uint32_t eocdSign = 0x06054b50;
-  // todo: store max size??
+  static const uint16_t maxCommentLength = 65535;
 };
 
 // ZIP64 end of central directory record
