@@ -75,22 +75,22 @@ struct ZipExtra
 // local file header
 struct LFH
 {
-  LFH( struct stat *fileInfo, std::string filename, uint32_t crc ) 
+  LFH( std::string filename, uint32_t crc, off_t fileSize, time_t time ) 
   {
     generalBitFlag = 0;
     compressionMethod = 0;
     ZCRC32 = crc;
-    if ( fileInfo->st_size > ovrflw32 ) 
+    if ( fileSize > ovrflw32 ) 
     {
       compressedSize = ovrflw32;
       uncompressedSize = ovrflw32;
     }
     else
     {
-      compressedSize = fileInfo->st_size;
-      uncompressedSize = fileInfo->st_size;
+      compressedSize = fileSize;
+      uncompressedSize = fileSize;
     }
-    extra = new ZipExtra( fileInfo->st_size );
+    extra = new ZipExtra( fileSize );
     extraLength = extra->totalSize;    
     if ( extraLength == 0 )
       minZipVersion = 10;
@@ -100,7 +100,7 @@ struct LFH
     this->filename = filename;
     filenameLength = this->filename.length();
     
-    MsdosDateTime( &fileInfo->st_mtime );
+    MsdosDateTime( &time );
 
     lfhSize = lfhBaseSize + filenameLength + extraLength;
   }
@@ -141,7 +141,7 @@ struct LFH
 // central directory file header
 struct CDFH
 {
-  CDFH( struct stat *fileInfo, LFH *lfh, uint64_t lfhOffset )
+  CDFH( LFH *lfh, mode_t mode, uint64_t lfhOffset )
   {
     zipVersion = ( 3 << 8 ) | 63;
     generalBitFlag = lfh->generalBitFlag;
@@ -155,7 +155,7 @@ struct CDFH
     commentLength = 0;
     nbDisk = 0;
     internAttr = 0;
-    externAttr = fileInfo->st_mode << 16;
+    externAttr = mode << 16;
     if ( lfhOffset > ovrflw32 ) 
       offset = ovrflw32;
     else
@@ -411,11 +411,11 @@ class ZipArchive
         std::cout << "Could not stat " << inputFilename << "\n";
       }
       
-      lfh = new LFH( &fileInfo, inputFilename, crc );
+      lfh = new LFH( inputFilename, crc, fileInfo.st_size, fileInfo.st_mtime );
       // todo: ZIP64 argument may need to be offset from ZIP64 EOCD
       if ( appending )
       {
-        cdfh = new CDFH( &fileInfo, lfh, eocd->cdOffset );
+        cdfh = new CDFH( lfh, fileInfo.st_mode, eocd->cdOffset );
         eocd->nbCdRecD += 1;
         eocd->nbCdRec += 1;
         // todo: deal with this for ZIP64
@@ -424,7 +424,7 @@ class ZipArchive
       }
       else
       {
-        cdfh = new CDFH( &fileInfo, lfh, 0 );
+        cdfh = new CDFH( lfh, fileInfo.st_mode, 0 );
         eocd = new EOCD( lfh, cdfh );
       }
 
