@@ -119,6 +119,33 @@ struct LFH
     lastModFileTime = ( hour << 11 ) | ( min << 5 ) | sec ;
     lastModFileDate =  ( year << 9 ) | ( month << 5 ) | day ;
   }
+
+  void Write( int archiveFd )
+  {
+    char buffer[lfhSize];
+    std::memcpy( buffer, &lfhSign, 4 );
+    std::memcpy( buffer + 4, &minZipVersion, 2 );
+    std::memcpy( buffer + 6, &generalBitFlag, 2 );
+    std::memcpy( buffer + 8, &compressionMethod, 2 );
+    std::memcpy( buffer + 10, &lastModFileTime, 2 );
+    std::memcpy( buffer + 12, &lastModFileDate, 2 );
+    std::memcpy( buffer + 14, &ZCRC32, 4 );
+    std::memcpy( buffer + 18, &compressedSize, 4 );
+    std::memcpy( buffer + 22, &uncompressedSize, 4 );
+    std::memcpy( buffer + 26, &filenameLength, 2 );
+    std::memcpy( buffer + 28, &extraLength, 2 );
+    std::memcpy( buffer + 30, filename.c_str(), filenameLength );
+    
+    if ( extraLength > 0 )
+    {
+      char extraBuffer[extraLength];
+      extra->concatenateFields( extraBuffer );
+      std::memcpy( buffer + 30 + filenameLength, extraBuffer, extraLength );
+    }
+
+    // todo: error handling 
+    write( archiveFd, buffer, lfhSize );
+  }
  
   uint16_t minZipVersion;
   uint16_t generalBitFlag;
@@ -169,6 +196,42 @@ struct CDFH
     filename = lfh->filename;
     comment = "";
     cdfhSize = cdfhBaseSize + filenameLength + extraLength + commentLength;
+  }
+
+  void Write( int archiveFd )
+  {
+    char buffer[cdfhSize];
+    std::memcpy( buffer, &cdfhSign, 4 );
+    std::memcpy( buffer + 4, &zipVersion, 2 );
+    std::memcpy( buffer + 6, &minZipVersion, 2 );
+    std::memcpy( buffer + 8, &generalBitFlag, 2 );
+    std::memcpy( buffer + 10, &compressionMethod, 2 );
+    std::memcpy( buffer + 12, &lastModFileTime, 2 );
+    std::memcpy( buffer + 14, &lastModFileDate, 2 );
+    std::memcpy( buffer + 16, &ZCRC32, 4 );
+    std::memcpy( buffer + 20, &compressedSize, 4 );
+    std::memcpy( buffer + 24, &uncompressedSize, 4 );
+    std::memcpy( buffer + 28, &filenameLength, 2 );
+    std::memcpy( buffer + 30, &extraLength, 2 );
+    std::memcpy( buffer + 32, &commentLength, 2 );
+    std::memcpy( buffer + 34, &nbDisk, 2 );
+    std::memcpy( buffer + 36, &internAttr, 2 );
+    std::memcpy( buffer + 38, &externAttr, 4 );
+    std::memcpy( buffer + 42, &offset, 4 );
+    std::memcpy( buffer + 46, filename.c_str(), filenameLength );
+    
+    if ( extraLength > 0 )
+    {
+      char extraBuffer[extraLength];
+      extra->concatenateFields( extraBuffer );
+      std::memcpy( buffer + 46 + filenameLength, extraBuffer, extraLength );
+    }
+
+    if ( commentLength > 0 )
+      std::memcpy( buffer + 46 + filenameLength + extraLength, comment.c_str(), commentLength );
+
+    // todo: error handling 
+    write( archiveFd, buffer, cdfhSize );
   }
 
   uint16_t zipVersion;
@@ -237,6 +300,25 @@ struct EOCD
     eocdSize = eocdBaseSize + commentLength;
   }
 
+  void Write( int archiveFd )
+  {
+    char buffer[eocdSize];
+    std::memcpy( buffer, &eocdSign, 4 ); 
+    std::memcpy( buffer + 4, &nbDisk, 2 );
+    std::memcpy( buffer + 6, &nbDiskCd, 2 ); 
+    std::memcpy( buffer + 8, &nbCdRecD, 2 ); 
+    std::memcpy( buffer + 10, &nbCdRec, 2 ); 
+    std::memcpy( buffer + 12, &cdSize, 4 ); 
+    std::memcpy( buffer + 16, &cdOffset, 4 ); 
+    std::memcpy( buffer + 20, &commentLength, 2 ); 
+    
+    if ( commentLength > 0 )
+      std::memcpy( buffer + 22, comment.c_str(), commentLength ); 
+
+    // todo: error handling
+    write( archiveFd, buffer, eocdSize );
+  }
+
   uint16_t nbDisk;
   uint16_t nbDiskCd;
   uint16_t nbCdRecD;
@@ -280,7 +362,28 @@ struct ZIP64_EOCD
     zip64EocdSize = zip64EocdBaseSize + extensibleDataLength - 12;
     zip64EocdTotalSize = zip64EocdBaseSize + extensibleDataLength;
   }
-  
+
+  void Write( int archiveFd )
+  {
+    char buffer[zip64EocdTotalSize];
+    std::memcpy( buffer, &zip64EocdSign, 4 );
+    std::memcpy( buffer + 4, &zip64EocdSize, 8 );
+    std::memcpy( buffer + 12, &zipVersion, 2 );
+    std::memcpy( buffer + 14, &minZipVersion, 2 );
+    std::memcpy( buffer + 16, &nbDisk, 4 );
+    std::memcpy( buffer + 20, &nbDiskCd, 4 );
+    std::memcpy( buffer + 24, &nbCdRecD, 8 );
+    std::memcpy( buffer + 32, &nbCdRec, 8 );
+    std::memcpy( buffer + 40, &cdSize, 8 );
+    std::memcpy( buffer + 48, &cdOffset, 8 );
+
+    if ( extensibleDataLength > 0 )
+      std::memcpy( buffer + 56, extensibleData.c_str(), extensibleDataLength );
+
+    // todo: error handling 
+    write( archiveFd, buffer, zip64EocdTotalSize );
+  }
+
   uint64_t zip64EocdSize;
   uint16_t zipVersion;
   uint16_t minZipVersion;
@@ -316,6 +419,18 @@ struct ZIP64_EOCDL
     else
       zip64EocdOffset += eocd->cdSize;
   }
+
+  void Write( int archiveFd )
+  {
+    char buffer[zip64EocdlSize];
+    std::memcpy( buffer, &zip64EocdlSign, 4 );
+    std::memcpy( buffer + 4, &nbDiskZip64Eocd, 4 );
+    std::memcpy( buffer + 8, &zip64EocdOffset, 8 );
+    std::memcpy( buffer + 16, &totalNbDisks, 4 );
+
+    // todo: error handling 
+    write( archiveFd, buffer, zip64EocdlSize );
+  }
   
   uint32_t nbDiskZip64Eocd;
   uint64_t zip64EocdOffset;
@@ -337,7 +452,7 @@ class ZipArchive
       appending = true;
     }
     
-    void openArchive()
+    void OpenArchive()
     {
       // open archive file for reading and writing and with file permissions 644
       archiveFd = open( archiveFilename.c_str(), O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
@@ -368,7 +483,7 @@ class ZipArchive
       }
     }
     
-    void constructHeaders()
+    void ConstructHeaders()
     {
       if ( appending )
       {
@@ -386,15 +501,14 @@ class ZipArchive
         // todo: error handling
         lseek( archiveFd, -size, SEEK_END );
         read( archiveFd, eocdBuffer, size );
-
         char *eocdBlock = LookForEocd( size, eocdBuffer );
         // todo: proper error handling 
         if ( !eocdBlock )
           std::cout << "Could not find the EOCD signature.\n";
         eocd = new EOCD( eocdBlock ) ;
 
-        // todo: adapt for ZIP64
         // read and store existing central directory
+        // todo: adapt for ZIP64
         uint64_t existingCdSize = eocd->cdSize;
         uint64_t offset = eocd->cdOffset;
         char buffer[existingCdSize];
@@ -416,6 +530,7 @@ class ZipArchive
       if ( appending )
       {
         cdfh = new CDFH( lfh, fileInfo.st_mode, eocd->cdOffset );
+        // udpate the EOCD
         eocd->nbCdRecD += 1;
         eocd->nbCdRec += 1;
         // todo: deal with this for ZIP64
@@ -447,154 +562,34 @@ class ZipArchive
       return 0;
     }
 
-    void writeArchive()
+    void WriteArchive()
     {
       if ( appending )
       {
-        lseek( archiveFd, cdfh->offset, SEEK_SET );
         // todo: error handling
+        lseek( archiveFd, cdfh->offset, SEEK_SET );
       }
-      writeLfh();
-      writeFileData();
+      lfh->Write( archiveFd );
+      WriteFileData();
       if ( appending )
-        writeExistingCd();
-      writeCdfh();
+        WriteExistingCd();
+      cdfh->Write( archiveFd );
       if ( eocd->useZip64 )
       {
-        writeZip64Eocd();
-        writeZip64Eocdl();
+        zip64Eocd->Write( archiveFd );
+        zip64Eocdl->Write( archiveFd );
       }
-      writeEocd();
+      eocd->Write( archiveFd );
     }
 
-    void writeLfh()
-    {
-      uint32_t size = lfh->lfhSize;
-      char buffer[size];
-      std::memcpy( buffer, &LFH::lfhSign, 4 );
-      std::memcpy( buffer + 4, &lfh->minZipVersion, 2 );
-      std::memcpy( buffer + 6, &lfh->generalBitFlag, 2 );
-      std::memcpy( buffer + 8, &lfh->compressionMethod, 2 );
-      std::memcpy( buffer + 10, &lfh->lastModFileTime, 2 );
-      std::memcpy( buffer + 12, &lfh->lastModFileDate, 2 );
-      std::memcpy( buffer + 14, &lfh->ZCRC32, 4 );
-      std::memcpy( buffer + 18, &lfh->compressedSize, 4 );
-      std::memcpy( buffer + 22, &lfh->uncompressedSize, 4 );
-      std::memcpy( buffer + 26, &lfh->filenameLength, 2 );
-      std::memcpy( buffer + 28, &lfh->extraLength, 2 );
-      std::memcpy( buffer + 30, lfh->filename.c_str(), lfh->filenameLength );
-      
-      if ( lfh->extraLength > 0 )
-      {
-        char extraBuffer[lfh->extraLength];
-        lfh->extra->concatenateFields( extraBuffer );
-        std::memcpy( buffer + 30 + lfh->filenameLength, extraBuffer, lfh->extraLength );
-      }
-
-      // todo: error handling 
-      write( archiveFd, buffer, size );
-    }
-
-    void writeExistingCd()
+    void WriteExistingCd()
     {
       // todo: error handling
       write( archiveFd, existingCd.c_str(), existingCd.length() );
     }
-
-    void writeCdfh()
-    {
-      uint32_t size = cdfh->cdfhSize;
-      char buffer[size];
-      std::memcpy( buffer, &CDFH::cdfhSign, 4 );
-      std::memcpy( buffer + 4, &cdfh->zipVersion, 2 );
-      std::memcpy( buffer + 6, &cdfh->minZipVersion, 2 );
-      std::memcpy( buffer + 8, &cdfh->generalBitFlag, 2 );
-      std::memcpy( buffer + 10, &cdfh->compressionMethod, 2 );
-      std::memcpy( buffer + 12, &cdfh->lastModFileTime, 2 );
-      std::memcpy( buffer + 14, &cdfh->lastModFileDate, 2 );
-      std::memcpy( buffer + 16, &cdfh->ZCRC32, 4 );
-      std::memcpy( buffer + 20, &cdfh->compressedSize, 4 );
-      std::memcpy( buffer + 24, &cdfh->uncompressedSize, 4 );
-      std::memcpy( buffer + 28, &cdfh->filenameLength, 2 );
-      std::memcpy( buffer + 30, &cdfh->extraLength, 2 );
-      std::memcpy( buffer + 32, &cdfh->commentLength, 2 );
-      std::memcpy( buffer + 34, &cdfh->nbDisk, 2 );
-      std::memcpy( buffer + 36, &cdfh->internAttr, 2 );
-      std::memcpy( buffer + 38, &cdfh->externAttr, 4 );
-      std::memcpy( buffer + 42, &cdfh->offset, 4 );
-      std::memcpy( buffer + 46, cdfh->filename.c_str(), cdfh->filenameLength );
-      
-      if ( cdfh->extraLength > 0 )
-      {
-        char extraBuffer[cdfh->extraLength];
-        cdfh->extra->concatenateFields( extraBuffer );
-        std::memcpy( buffer + 46 + cdfh->filenameLength, extraBuffer, cdfh->extraLength );
-      }
-
-      if ( cdfh->commentLength > 0 )
-        std::memcpy( buffer + 46 + cdfh->filenameLength + cdfh->extraLength, cdfh->comment.c_str(), cdfh->commentLength );
-
-      // todo: error handling 
-      write( archiveFd, buffer, size );
-    }
-
-    void writeZip64Eocd()
-    {
-      uint64_t size = zip64Eocd->zip64EocdTotalSize;
-      char buffer[size];
-      std::memcpy( buffer, &ZIP64_EOCD::zip64EocdSign, 4 );
-      std::memcpy( buffer + 4, &zip64Eocd->zip64EocdSize, 8 );
-      std::memcpy( buffer + 12, &zip64Eocd->zipVersion, 2 );
-      std::memcpy( buffer + 14, &zip64Eocd->minZipVersion, 2 );
-      std::memcpy( buffer + 16, &zip64Eocd->nbDisk, 4 );
-      std::memcpy( buffer + 20, &zip64Eocd->nbDiskCd, 4 );
-      std::memcpy( buffer + 24, &zip64Eocd->nbCdRecD, 8 );
-      std::memcpy( buffer + 32, &zip64Eocd->nbCdRec, 8 );
-      std::memcpy( buffer + 40, &zip64Eocd->cdSize, 8 );
-      std::memcpy( buffer + 48, &zip64Eocd->cdOffset, 8 );
-
-      if ( zip64Eocd->extensibleDataLength > 0 )
-        std::memcpy( buffer + 56, zip64Eocd->extensibleData.c_str(), zip64Eocd->extensibleDataLength );
-
-      // todo: error handling 
-      write( archiveFd, buffer, size );
-    }
-
-    void writeZip64Eocdl()
-    {
-      uint16_t size = ZIP64_EOCDL::zip64EocdlSize;
-      char buffer[size];
-      std::memcpy( buffer, &ZIP64_EOCDL::zip64EocdlSign, 4 );
-      std::memcpy( buffer + 4, &zip64Eocdl->nbDiskZip64Eocd, 4 );
-      std::memcpy( buffer + 8, &zip64Eocdl->zip64EocdOffset, 8 );
-      std::memcpy( buffer + 16, &zip64Eocdl->totalNbDisks, 4 );
-
-      // todo: error handling 
-      write( archiveFd, buffer, size );
-    }
-
-    void writeEocd()
-    {
-      uint32_t size = eocd->eocdSize;
-      char buffer[size];
-      std::memcpy( buffer, &EOCD::eocdSign, 4 ); 
-      std::memcpy( buffer + 4, &eocd->nbDisk, 2 );
-      std::memcpy( buffer + 6, &eocd->nbDiskCd, 2 ); 
-      std::memcpy( buffer + 8, &eocd->nbCdRecD, 2 ); 
-      std::memcpy( buffer + 10, &eocd->nbCdRec, 2 ); 
-      std::memcpy( buffer + 12, &eocd->cdSize, 4 ); 
-      std::memcpy( buffer + 16, &eocd->cdOffset, 4 ); 
-      std::memcpy( buffer + 20, &eocd->commentLength, 2 ); 
-      
-      if ( eocd->commentLength > 0 )
-        std::memcpy( buffer + 22, eocd->comment.c_str(), eocd->commentLength ); 
-
-      // todo: error handling
-      write( archiveFd, buffer, size );
-    }
     
     // only for testing purposes
-    void writeFileData()
+    void WriteFileData()
     {
       std::cout << "Writing file data...\n";
       int bytes_read;
@@ -613,7 +608,7 @@ class ZipArchive
       std::cout << "File data written: " << std::hex << total_bytes << "\n";
     }
 
-    void closeArchive()
+    void CloseArchive()
     {
       // todo: error handling
       close( inputFd );
@@ -642,9 +637,9 @@ int main( int argc, char **argv )
   std::string inputFilename = "file.txt";
   std::string archiveFilename = "archive.zip"; 
   // uncomment crc when zipping file.txt
-  //uint32_t crc = 0x797b4b0e;
+  uint32_t crc = 0x797b4b0e;
   // uncomment crc when zipping 4GB.dat
-  uint32_t crc = 0x756db3ac;
+  //uint32_t crc = 0x756db3ac;
   if (argc >= 3)
   {
     inputFilename = argv[1];
@@ -658,10 +653,10 @@ int main( int argc, char **argv )
   std::cout << "crc: " << std::hex << crc << "\n"; 
 
   ZipArchive *archive = new ZipArchive( inputFilename, archiveFilename, crc );
-  archive->openArchive();
-  archive->constructHeaders();
-  archive->writeArchive();
-  archive->closeArchive();
+  archive->OpenArchive();
+  archive->ConstructHeaders();
+  archive->WriteArchive();
+  archive->CloseArchive();
 }
 
  
