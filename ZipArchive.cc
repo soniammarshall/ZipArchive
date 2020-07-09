@@ -379,7 +379,15 @@ class ZipArchive
           std::cout << "Could not stat " << archiveFilename << "\n";
         }
         // find EOCD in ZIP archive
-        char *eocdBlock = LookForEocd( zipInfo->st_size );
+        uint64_t size = EOCD::maxCommentLength + EOCD::eocdBaseSize;
+        if ( size > zipInfo.st_size )
+          size = zipInfo.st_size;
+        char eocdBuffer[size];
+        // todo: error handling
+        lseek( archiveFd, -size, SEEK_END );
+        read( archiveFd, eocdBuffer, size );
+
+        char *eocdBlock = LookForEocd( size, eocdBuffer );
         // todo: proper error handling 
         if ( !eocdBlock )
           std::cout << "Could not find the EOCD signature.\n";
@@ -427,9 +435,15 @@ class ZipArchive
       }
     }
 
-    char* LookForEocd( uint64_t size )
+    // taken from ZipArchiveReader.cc and modified
+    char* LookForEocd( uint64_t size, char *buffer )
     {
-      // todo: implement
+      for( ssize_t offset = size - EOCD::eocdBaseSize; offset >= 0; --offset )
+      {
+        uint32_t *signature = reinterpret_cast<uint32_t*>( buffer + offset );
+        if( *signature == EOCD::eocdSign ) 
+          return buffer + offset;
+      }
       return 0;
     }
 
