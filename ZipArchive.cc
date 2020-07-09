@@ -471,7 +471,7 @@ class ZipArchive
     {
       uint32_t size = lfh->lfhSize;
       char buffer[size];
-      std::memcpy( buffer, &lfh->lfhSign, 4 );
+      std::memcpy( buffer, &LFH::lfhSign, 4 );
       std::memcpy( buffer + 4, &lfh->minZipVersion, 2 );
       std::memcpy( buffer + 6, &lfh->generalBitFlag, 2 );
       std::memcpy( buffer + 8, &lfh->compressionMethod, 2 );
@@ -505,7 +505,7 @@ class ZipArchive
     {
       uint32_t size = cdfh->cdfhSize;
       char buffer[size];
-      std::memcpy( buffer, &cdfh->cdfhSign, 4 );
+      std::memcpy( buffer, &CDFH::cdfhSign, 4 );
       std::memcpy( buffer + 4, &cdfh->zipVersion, 2 );
       std::memcpy( buffer + 6, &cdfh->minZipVersion, 2 );
       std::memcpy( buffer + 8, &cdfh->generalBitFlag, 2 );
@@ -542,7 +542,7 @@ class ZipArchive
     {
       uint64_t size = zip64Eocd->zip64EocdTotalSize;
       char buffer[size];
-      std::memcpy( buffer, &zip64Eocd->zip64EocdSign, 4 );
+      std::memcpy( buffer, &ZIP64_EOCD::zip64EocdSign, 4 );
       std::memcpy( buffer + 4, &zip64Eocd->zip64EocdSize, 8 );
       std::memcpy( buffer + 12, &zip64Eocd->zipVersion, 2 );
       std::memcpy( buffer + 14, &zip64Eocd->minZipVersion, 2 );
@@ -562,9 +562,9 @@ class ZipArchive
 
     void writeZip64Eocdl()
     {
-      uint16_t size = zip64Eocdl->zip64EocdlSize;
+      uint16_t size = ZIP64_EOCDL::zip64EocdlSize;
       char buffer[size];
-      std::memcpy( buffer, &zip64Eocdl->zip64EocdlSign, 4 );
+      std::memcpy( buffer, &ZIP64_EOCDL::zip64EocdlSign, 4 );
       std::memcpy( buffer + 4, &zip64Eocdl->nbDiskZip64Eocd, 4 );
       std::memcpy( buffer + 8, &zip64Eocdl->zip64EocdOffset, 8 );
       std::memcpy( buffer + 16, &zip64Eocdl->totalNbDisks, 4 );
@@ -577,7 +577,7 @@ class ZipArchive
     {
       uint32_t size = eocd->eocdSize;
       char buffer[size];
-      std::memcpy( buffer, &eocd->eocdSign, 4 ); 
+      std::memcpy( buffer, &EOCD::eocdSign, 4 ); 
       std::memcpy( buffer + 4, &eocd->nbDisk, 2 );
       std::memcpy( buffer + 6, &eocd->nbDiskCd, 2 ); 
       std::memcpy( buffer + 8, &eocd->nbCdRecD, 2 ); 
