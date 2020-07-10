@@ -443,11 +443,9 @@ class ZipArchive
 {
   public:
 
-    ZipArchive( std::string inputFilename, std::string archiveFilename, uint32_t crc )
+    ZipArchive( std::string archiveFilename )
     {
-      this->inputFilename = inputFilename;
       this->archiveFilename = archiveFilename;
-      this->crc = crc;
     }
     
     void Open()
@@ -507,16 +505,8 @@ class ZipArchive
       }
     }
     
-    void Append()
-    {    
-      // open input file for reading
-      inputFd = open( inputFilename.c_str(), O_RDONLY );
-      if ( inputFd == -1 )
-      {
-        // todo: proper error handling
-        std::cout << "Could not open " << inputFilename << "\n";  
-      }
-
+    void Append( int inputFd, std::string inputFilename, uint32_t crc )
+    {
       struct stat fileInfo;
       if ( fstat( inputFd, &fileInfo ) == -1 )
       {
@@ -591,7 +581,7 @@ class ZipArchive
     }
     
     // for testing purposes - not in final API
-    void WriteFileData()
+    void WriteFileData( int inputFd )
     {
       std::cout << "Writing file data...\n";
       int bytes_read;
@@ -621,18 +611,28 @@ class ZipArchive
     }
 
   private:
-    int inputFd;
     int archiveFd;
-    std::string inputFilename;
     std::string archiveFilename;
     CDFH *cdfh;
     EOCD *eocd;
     ZIP64_EOCD *zip64Eocd;
     ZIP64_EOCDL *zip64Eocdl;
-    uint32_t crc;
     std::string existingCd;
 
 };
+
+// for testing purposes - not in final API
+int OpenInputFile( std::string inputFilename )
+{
+  // open input file for reading
+  int inputFd = open( inputFilename.c_str(), O_RDONLY );
+  if ( inputFd == -1 )
+  {
+    // todo: proper error handling
+    std::cout << "Could not open " << inputFilename << "\n";  
+  }
+  return inputFd;
+}
 
 // run as ./ZipArchive <input filename> <output filename>
 int main( int argc, char **argv )
@@ -655,10 +655,12 @@ int main( int argc, char **argv )
   std::cout << "Output file: " << archiveFilename << "\n";
   std::cout << "crc: " << std::hex << crc << "\n"; 
 
-  ZipArchive *archive = new ZipArchive( inputFilename, archiveFilename, crc );
+  int inputFd = OpenInputFile( inputFilename );
+
+  ZipArchive *archive = new ZipArchive( archiveFilename );
   archive->Open();
-  archive->Append();
-  archive->WriteFileData();
+  archive->Append( inputFd, inputFilename, crc );
+  archive->WriteFileData( inputFd );
   archive->Finalize();
   archive->Close();
 }
