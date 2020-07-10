@@ -8,6 +8,7 @@
 #include <ctime>
 #include <cstring>
 #include <errno.h>
+#include <vector>
 
 const uint32_t ovrflw32 = 0xffffffff;
 
@@ -517,6 +518,7 @@ class ZipArchive
       LFH *lfh = new LFH( inputFilename, crc, fileInfo.st_size, fileInfo.st_mtime );
 
       // todo: ZIP64 argument may need to be offset from ZIP64 EOCD
+      CDFH *cdfh;
       if ( eocd )
       {
         // must be appending to existing archive
@@ -534,6 +536,7 @@ class ZipArchive
         cdfh = new CDFH( lfh, fileInfo.st_mode, 0 );
         eocd = new EOCD( lfh, cdfh );
       }
+      cdRecords.push_back( cdfh );
 
       if ( eocd->useZip64 )
       {
@@ -564,7 +567,8 @@ class ZipArchive
       // write central directory records to archive
       if ( existingCd.length() > 0 )
         WriteExistingCd();
-      cdfh->Write( archiveFd );
+      for ( int i=0; i<cdRecords.size(); i++)
+        cdRecords[i]->Write( archiveFd );
       // write EOCD to archive
       if ( eocd->useZip64 )
       {
@@ -613,7 +617,7 @@ class ZipArchive
   private:
     int archiveFd;
     std::string archiveFilename;
-    CDFH *cdfh;
+    std::vector<CDFH*> cdRecords;
     EOCD *eocd;
     ZIP64_EOCD *zip64Eocd;
     ZIP64_EOCDL *zip64Eocdl;
@@ -632,6 +636,28 @@ int OpenInputFile( std::string inputFilename )
     std::cout << "Could not open " << inputFilename << "\n";  
   }
   return inputFd;
+}
+
+void test()
+{
+  uint32_t crc = 0x797b4b0e;
+  std::string inputFilename = "bible.txt";
+  std::string inputFilename2 = "E.coli";
+  std::string inputFilename3 = "world192.txt";
+  int inputFd = OpenInputFile( inputFilename );
+  int inputFd2 = OpenInputFile( inputFilename2 );
+  int inputFd3 = OpenInputFile( inputFilename3 );
+
+  ZipArchive *archive = new ZipArchive( "archive.zip" );
+  archive->Open();
+  archive->Append( inputFd, inputFilename, 0x75a16a5b );
+  archive->WriteFileData( inputFd );
+  archive->Append( inputFd2, inputFilename2, 0xe711a86e );
+  archive->WriteFileData( inputFd2 );
+  archive->Append( inputFd3, inputFilename3, 0x933325f6 );
+  archive->WriteFileData( inputFd3 );
+  archive->Finalize();
+  archive->Close();
 }
 
 // run as ./ZipArchive <input filename> <output filename>
@@ -655,14 +681,16 @@ int main( int argc, char **argv )
   std::cout << "Output file: " << archiveFilename << "\n";
   std::cout << "crc: " << std::hex << crc << "\n"; 
 
-  int inputFd = OpenInputFile( inputFilename );
+  // int inputFd = OpenInputFile( inputFilename );
 
-  ZipArchive *archive = new ZipArchive( archiveFilename );
-  archive->Open();
-  archive->Append( inputFd, inputFilename, crc );
-  archive->WriteFileData( inputFd );
-  archive->Finalize();
-  archive->Close();
+  // ZipArchive *archive = new ZipArchive( archiveFilename );
+  // archive->Open();
+  // archive->Append( inputFd, inputFilename, crc );
+  // archive->WriteFileData( inputFd );
+  // archive->Finalize();
+  // archive->Close();
+
+  test();
 }
 
  
