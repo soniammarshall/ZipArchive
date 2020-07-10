@@ -448,21 +448,21 @@ class ZipArchive
       this->inputFilename = inputFilename;
       this->archiveFilename = archiveFilename;
       this->crc = crc;
-      appending = true;
     }
     
     void Open()
     {
       // open archive file for reading and writing and with file permissions 644
       archiveFd = open( archiveFilename.c_str(), O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
+
       if ( archiveFd == -1 )
       {
         if ( errno == ENOENT ) 
         {
           // file doesn't exist, so must be creating ZIP archive from scratch
-          archiveFd = open( archiveFilename.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
           // todo: error handling
-          appending = false;
+          archiveFd = open( archiveFilename.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
+          std::cout << "Creating new zip archive...\n";
         }
         else
         {
@@ -470,12 +470,11 @@ class ZipArchive
           std::cout << "Could not open " << archiveFilename << "\n";  
         }
       }
-      // else file exists, so we must be appending to existing ZIP archive
-      std::cout << "Appending: " << appending << "\n";
-
-      // read and store existing EOCD and CD entries
-      if ( appending )
+      else
       {
+        // file exists, so we must be appending to existing ZIP archive
+        std::cout << "Appending to existing zip archive...\n";   
+        // read and store existing EOCD and central directory records
         struct stat zipInfo;
         if ( fstat( archiveFd, &zipInfo ) == -1 )
         {
@@ -526,9 +525,11 @@ class ZipArchive
       }
       
       lfh = new LFH( inputFilename, crc, fileInfo.st_size, fileInfo.st_mtime );
+
       // todo: ZIP64 argument may need to be offset from ZIP64 EOCD
-      if ( appending )
+      if ( eocd )
       {
+        // must be appending to existing archive
         cdfh = new CDFH( lfh, fileInfo.st_mode, eocd->cdOffset );
         // udpate the EOCD
         eocd->nbCdRecD += 1;
@@ -539,6 +540,7 @@ class ZipArchive
       }
       else
       {
+        // must be creating new archive
         cdfh = new CDFH( lfh, fileInfo.st_mode, 0 );
         eocd = new EOCD( lfh, cdfh );
       }
@@ -550,12 +552,8 @@ class ZipArchive
       }
 
       // write local file header to the archive
-      // todo: remove if statement, since offset is always correct
-      if ( appending )
-      {
-        // todo: error handling
-        lseek( archiveFd, cdfh->offset, SEEK_SET );
-      }
+      // todo: error handling
+      lseek( archiveFd, cdfh->offset, SEEK_SET );
       lfh->Write( archiveFd );
     }
 
@@ -573,9 +571,11 @@ class ZipArchive
 
     void Finalize()
     {
-      if ( appending )
+      // write central directory records to archive
+      if ( existingCd.length() > 0 )
         WriteExistingCd();
       cdfh->Write( archiveFd );
+      // write EOCD to archive
       if ( eocd->useZip64 )
       {
         zip64Eocd->Write( archiveFd );
@@ -590,7 +590,7 @@ class ZipArchive
       write( archiveFd, existingCd.c_str(), existingCd.length() );
     }
     
-    // only for testing purposes
+    // for testing purposes - not in final API
     void WriteFileData()
     {
       std::cout << "Writing file data...\n";
@@ -615,6 +615,7 @@ class ZipArchive
 
     void Close()
     {
+      // close the archive
       // todo: error handling
       close ( archiveFd );
     }
@@ -630,7 +631,6 @@ class ZipArchive
     ZIP64_EOCD *zip64Eocd;
     ZIP64_EOCDL *zip64Eocdl;
     uint32_t crc;
-    bool appending;
     std::string existingCd;
 
 };
