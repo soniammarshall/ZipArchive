@@ -524,7 +524,7 @@ class ZipArchive
         std::cout << "Could not stat " << inputFilename << "\n";
       }
       
-      lfh = new LFH( inputFilename, crc, fileInfo.st_size, fileInfo.st_mtime );
+      LFH *lfh = new LFH( inputFilename, crc, fileInfo.st_size, fileInfo.st_mtime );
 
       // todo: ZIP64 argument may need to be offset from ZIP64 EOCD
       if ( eocd )
@@ -625,7 +625,6 @@ class ZipArchive
     int archiveFd;
     std::string inputFilename;
     std::string archiveFilename;
-    LFH *lfh;
     CDFH *cdfh;
     EOCD *eocd;
     ZIP64_EOCD *zip64Eocd;
