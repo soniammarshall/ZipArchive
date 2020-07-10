@@ -96,7 +96,6 @@ struct LFH
       minZipVersion = 10;
     else
       minZipVersion = 45;
-    // todo: filepath vs filename
     this->filename = filename;
     filenameLength = this->filename.length();
     
@@ -452,7 +451,7 @@ class ZipArchive
       appending = true;
     }
     
-    void OpenArchive()
+    void Open()
     {
       // open archive file for reading and writing and with file permissions 644
       archiveFd = open( archiveFilename.c_str(), O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
@@ -473,18 +472,8 @@ class ZipArchive
       }
       // else file exists, so we must be appending to existing ZIP archive
       std::cout << "Appending: " << appending << "\n";
-          
-      // open input file for reading
-      inputFd = open( inputFilename.c_str(), O_RDONLY );
-      if ( inputFd == -1 )
-      {
-        // todo: proper error handling
-        std::cout << "Could not open " << inputFilename << "\n";  
-      }
-    }
-    
-    void ConstructHeaders()
-    {
+
+      // read and store existing EOCD and CD entries
       if ( appending )
       {
         struct stat zipInfo;
@@ -493,7 +482,6 @@ class ZipArchive
           // todo: proper error handling
           std::cout << "Could not stat " << archiveFilename << "\n";
         }
-        // find EOCD in ZIP archive
         uint64_t size = EOCD::maxCommentLength + EOCD::eocdBaseSize;
         if ( size > zipInfo.st_size )
           size = zipInfo.st_size;
@@ -501,6 +489,7 @@ class ZipArchive
         // todo: error handling
         lseek( archiveFd, -size, SEEK_END );
         read( archiveFd, eocdBuffer, size );
+        // find EOCD in ZIP archive
         char *eocdBlock = LookForEocd( size, eocdBuffer );
         // todo: proper error handling 
         if ( !eocdBlock )
@@ -517,7 +506,18 @@ class ZipArchive
         read( archiveFd, buffer, existingCdSize );
         existingCd = std::string( buffer, existingCdSize );
       }
-      
+    }
+    
+    void Append()
+    {    
+      // open input file for reading
+      inputFd = open( inputFilename.c_str(), O_RDONLY );
+      if ( inputFd == -1 )
+      {
+        // todo: proper error handling
+        std::cout << "Could not open " << inputFilename << "\n";  
+      }
+
       struct stat fileInfo;
       if ( fstat( inputFd, &fileInfo ) == -1 )
       {
@@ -548,6 +548,15 @@ class ZipArchive
         zip64Eocd = new ZIP64_EOCD( eocd, lfh );
         zip64Eocdl = new ZIP64_EOCDL( eocd, zip64Eocd );
       }
+
+      // write local file header to the archive
+      // todo: remove if statement, since offset is always correct
+      if ( appending )
+      {
+        // todo: error handling
+        lseek( archiveFd, cdfh->offset, SEEK_SET );
+      }
+      lfh->Write( archiveFd );
     }
 
     // taken from ZipArchiveReader.cc and modified
@@ -562,15 +571,8 @@ class ZipArchive
       return 0;
     }
 
-    void WriteArchive()
+    void Finalize()
     {
-      if ( appending )
-      {
-        // todo: error handling
-        lseek( archiveFd, cdfh->offset, SEEK_SET );
-      }
-      lfh->Write( archiveFd );
-      WriteFileData();
       if ( appending )
         WriteExistingCd();
       cdfh->Write( archiveFd );
@@ -606,12 +608,14 @@ class ZipArchive
       while( bytes_read != 0 );
       std::cout << "Finished writing file data.\n"; 
       std::cout << "File data written: " << std::hex << total_bytes << "\n";
-    }
 
-    void CloseArchive()
-    {
       // todo: error handling
       close( inputFd );
+    }
+
+    void Close()
+    {
+      // todo: error handling
       close ( archiveFd );
     }
 
@@ -653,10 +657,11 @@ int main( int argc, char **argv )
   std::cout << "crc: " << std::hex << crc << "\n"; 
 
   ZipArchive *archive = new ZipArchive( inputFilename, archiveFilename, crc );
-  archive->OpenArchive();
-  archive->ConstructHeaders();
-  archive->WriteArchive();
-  archive->CloseArchive();
+  archive->Open();
+  archive->Append();
+  archive->WriteFileData();
+  archive->Finalize();
+  archive->Close();
 }
 
  
