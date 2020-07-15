@@ -372,7 +372,6 @@ struct ZIP64_EOCD
     minZipVersion = 45;
     nbDisk = eocd->nbDisk;
     nbDiskCd = eocd->nbDiskCd;
-    // todo: will the number of records ever overflow?
     nbCdRecD = eocd->nbCdRecD;
     nbCdRec = eocd->nbCdRec;
     if ( eocd->cdSize == ovrflw32 )
@@ -448,7 +447,6 @@ struct ZIP64_EOCDL
   {
     nbDiskZip64Eocd = 0;
     totalNbDisks = 1;
-    // todo: shouldn't this always come from the zip64Eocd?
     if ( eocd->cdOffset == ovrflw32 )
       zip64EocdOffset = zip64Eocd->cdOffset;
     else 
