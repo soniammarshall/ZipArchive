@@ -521,16 +521,17 @@ class ZipArchive
         }
         archiveSize = zipInfo.st_size;
 
+        // read EOCD into buffer
         uint32_t size = EOCD::maxCommentLength + EOCD::eocdBaseSize + ZIP64_EOCDL::zip64EocdlSize;
         if ( size > archiveSize ) size = archiveSize;
         uint64_t offset = archiveSize - size;
-        pBuffer.reset( new char[size] );
+        buffer.reset( new char[size] );
         // todo: error handling
         lseek( archiveFd, offset, SEEK_SET );
-        read( archiveFd, pBuffer.get(), size );
+        read( archiveFd, buffer.get(), size );
 
-        // read and store existing EOCD, ZIP64EOCD, ZIP64EOCDL and central directory
-        ReadCdfh( size );
+        // find and store existing EOCD, ZIP64EOCD, ZIP64EOCDL and central directory records
+        ReadCentralDirectory( size );
       }
     }
     
@@ -577,6 +578,7 @@ class ZipArchive
           
           if ( eocd->cdSize + cdfh->cdfhSize > ovrflw32 || lfh->compressedSize == ovrflw32 || eocd->cdOffset + lfh->lfhSize + lfh->compressedSize > ovrflw32 )
           {
+            // overflown
             eocd->useZip64 = true;
             prevCdSize = eocd->cdSize;
             prevCdOffset = eocd->cdOffset;
@@ -596,6 +598,7 @@ class ZipArchive
         cdfh = new CDFH( lfh, fileInfo.st_mode, 0 );
         eocd = new EOCD( lfh, cdfh );
       }
+
       cdRecords.push_back( cdfh );
 
       if ( eocd->useZip64 && !zip64Eocd )
@@ -616,14 +619,14 @@ class ZipArchive
     {
       for( ssize_t offset = size - EOCD::eocdBaseSize; offset >= 0; --offset )
       {
-        uint32_t *signature = reinterpret_cast<uint32_t*>( pBuffer.get() + offset );
-        if( *signature == EOCD::eocdSign ) return pBuffer.get() + offset;
+        uint32_t *signature = reinterpret_cast<uint32_t*>( buffer.get() + offset );
+        if( *signature == EOCD::eocdSign ) return buffer.get() + offset;
       }
       return 0;
     }
 
-    // taken from ZipArchiveReader.cc (modified)
-    void ReadCdfh( uint64_t bytesRead )
+    // taken from ZipArchiveReader.cc (modified ReadCdfh())
+    void ReadCentralDirectory( uint64_t bytesRead )
     {
       char *eocdBlock = LookForEocd( bytesRead );
       if( !eocdBlock )
@@ -633,7 +636,7 @@ class ZipArchive
       // Let's see if it is ZIP64 (if yes, the EOCD will be preceded with ZIP64 EOCD locator)
       char *zip64EocdlBlock = eocdBlock - ZIP64_EOCDL::zip64EocdlSize;
       // make sure there is enough data to assume there's a ZIP64 EOCD locator
-      if( zip64EocdlBlock > pBuffer.get() )
+      if( zip64EocdlBlock > buffer.get() )
       {
         uint32_t *signature = reinterpret_cast<uint32_t*>( zip64EocdlBlock );
         if( *signature == ZIP64_EOCDL::zip64EocdlSign )
@@ -645,13 +648,13 @@ class ZipArchive
           {
             // we need to read more data
             uint32_t size = archiveSize - zip64Eocdl->zip64EocdOffset;
-            pBuffer.reset( new char[size] );
+            buffer.reset( new char[size] );
             // todo: error handling
             lseek( archiveFd, zip64Eocdl->zip64EocdOffset, SEEK_SET );
-            read( archiveFd, pBuffer.get(), size );
+            read( archiveFd, buffer.get(), size );
           }
 
-          char *zip64EocdBlock = pBuffer.get() + ( zip64Eocdl->zip64EocdOffset - buffOffset );
+          char *zip64EocdBlock = buffer.get() + ( zip64Eocdl->zip64EocdOffset - buffOffset );
           signature = reinterpret_cast<uint32_t*>( zip64EocdBlock );
           if( *signature != ZIP64_EOCD::zip64EocdSign )
             std::cout << "Could not find the ZIP64 EOCD signature.\n";
@@ -705,13 +708,13 @@ class ZipArchive
       std::cout << "Writing file data...\n";
       int bytes_read;
       int size = 10240;
-      char buffer[size];
+      buffer.reset( new char[size] );
       uint64_t total_bytes = 0;
       do
       {
         // todo: error handling for read and write
-        bytes_read = read( inputFd, buffer, size );
-        write( archiveFd, buffer, bytes_read );
+        bytes_read = read( inputFd, buffer.get(), size );
+        write( archiveFd, buffer.get(), bytes_read );
         total_bytes += bytes_read;
       } 
       while( bytes_read != 0 );
@@ -737,8 +740,7 @@ class ZipArchive
     EOCD                    *eocd;
     ZIP64_EOCD              *zip64Eocd;
     ZIP64_EOCDL             *zip64Eocdl;
-    std::string             existingCd;
-    std::unique_ptr<char[]> pBuffer;
+    std::unique_ptr<char[]> buffer;
     std::unique_ptr<char[]> cdBuffer;
     uint32_t                existingCdSize;
 };
@@ -756,6 +758,7 @@ int OpenInputFile( std::string inputFilename )
   return inputFd;
 }
 
+// for testing purposes - not in final API
 void test()
 {
   std::string inputFilename = "bible.txt";
