@@ -126,29 +126,29 @@ struct LFH
 
   void Write( int archiveFd )
   {
-    char buffer[lfhSize];
-    std::memcpy( buffer, &lfhSign, 4 );
-    std::memcpy( buffer + 4, &minZipVersion, 2 );
-    std::memcpy( buffer + 6, &generalBitFlag, 2 );
-    std::memcpy( buffer + 8, &compressionMethod, 2 );
-    std::memcpy( buffer + 10, &lastModFileTime, 2 );
-    std::memcpy( buffer + 12, &lastModFileDate, 2 );
-    std::memcpy( buffer + 14, &ZCRC32, 4 );
-    std::memcpy( buffer + 18, &compressedSize, 4 );
-    std::memcpy( buffer + 22, &uncompressedSize, 4 );
-    std::memcpy( buffer + 26, &filenameLength, 2 );
-    std::memcpy( buffer + 28, &extraLength, 2 );
-    std::memcpy( buffer + 30, filename.c_str(), filenameLength );
+    std::unique_ptr<char[]> buffer { new char[lfhSize] };
+    std::memcpy( buffer.get(), &lfhSign, 4 );
+    std::memcpy( buffer.get() + 4, &minZipVersion, 2 );
+    std::memcpy( buffer.get() + 6, &generalBitFlag, 2 );
+    std::memcpy( buffer.get() + 8, &compressionMethod, 2 );
+    std::memcpy( buffer.get() + 10, &lastModFileTime, 2 );
+    std::memcpy( buffer.get() + 12, &lastModFileDate, 2 );
+    std::memcpy( buffer.get() + 14, &ZCRC32, 4 );
+    std::memcpy( buffer.get() + 18, &compressedSize, 4 );
+    std::memcpy( buffer.get() + 22, &uncompressedSize, 4 );
+    std::memcpy( buffer.get() + 26, &filenameLength, 2 );
+    std::memcpy( buffer.get() + 28, &extraLength, 2 );
+    std::memcpy( buffer.get() + 30, filename.c_str(), filenameLength );
     
     if ( extraLength > 0 )
     {
-      char extraBuffer[extraLength];
-      extra->concatenateFields( extraBuffer );
-      std::memcpy( buffer + 30 + filenameLength, extraBuffer, extraLength );
+      std::unique_ptr<char[]> extraBuffer { new char[extraLength] };
+      extra->concatenateFields( extraBuffer.get() );
+      std::memcpy( buffer.get() + 30 + filenameLength, extraBuffer.get(), extraLength );
     }
 
     // todo: error handling 
-    uint32_t bytes_written = write( archiveFd, buffer, lfhSize );
+    uint32_t bytes_written = write( archiveFd, buffer.get(), lfhSize );
     //std::cout << "LFH bytes written: " << bytes_written << "\n";
   }
  
@@ -205,38 +205,38 @@ struct CDFH
 
   void Write( int archiveFd )
   {
-    char buffer[cdfhSize];
-    std::memcpy( buffer, &cdfhSign, 4 );
-    std::memcpy( buffer + 4, &zipVersion, 2 );
-    std::memcpy( buffer + 6, &minZipVersion, 2 );
-    std::memcpy( buffer + 8, &generalBitFlag, 2 );
-    std::memcpy( buffer + 10, &compressionMethod, 2 );
-    std::memcpy( buffer + 12, &lastModFileTime, 2 );
-    std::memcpy( buffer + 14, &lastModFileDate, 2 );
-    std::memcpy( buffer + 16, &ZCRC32, 4 );
-    std::memcpy( buffer + 20, &compressedSize, 4 );
-    std::memcpy( buffer + 24, &uncompressedSize, 4 );
-    std::memcpy( buffer + 28, &filenameLength, 2 );
-    std::memcpy( buffer + 30, &extraLength, 2 );
-    std::memcpy( buffer + 32, &commentLength, 2 );
-    std::memcpy( buffer + 34, &nbDisk, 2 );
-    std::memcpy( buffer + 36, &internAttr, 2 );
-    std::memcpy( buffer + 38, &externAttr, 4 );
-    std::memcpy( buffer + 42, &offset, 4 );
-    std::memcpy( buffer + 46, filename.c_str(), filenameLength );
+    std::unique_ptr<char[]> buffer { new char[cdfhSize] };
+    std::memcpy( buffer.get(), &cdfhSign, 4 );
+    std::memcpy( buffer.get() + 4, &zipVersion, 2 );
+    std::memcpy( buffer.get() + 6, &minZipVersion, 2 );
+    std::memcpy( buffer.get() + 8, &generalBitFlag, 2 );
+    std::memcpy( buffer.get() + 10, &compressionMethod, 2 );
+    std::memcpy( buffer.get() + 12, &lastModFileTime, 2 );
+    std::memcpy( buffer.get() + 14, &lastModFileDate, 2 );
+    std::memcpy( buffer.get() + 16, &ZCRC32, 4 );
+    std::memcpy( buffer.get() + 20, &compressedSize, 4 );
+    std::memcpy( buffer.get() + 24, &uncompressedSize, 4 );
+    std::memcpy( buffer.get() + 28, &filenameLength, 2 );
+    std::memcpy( buffer.get() + 30, &extraLength, 2 );
+    std::memcpy( buffer.get() + 32, &commentLength, 2 );
+    std::memcpy( buffer.get() + 34, &nbDisk, 2 );
+    std::memcpy( buffer.get() + 36, &internAttr, 2 );
+    std::memcpy( buffer.get() + 38, &externAttr, 4 );
+    std::memcpy( buffer.get() + 42, &offset, 4 );
+    std::memcpy( buffer.get() + 46, filename.c_str(), filenameLength );
     
     if ( extraLength > 0 )
     {
-      char extraBuffer[extraLength];
-      extra->concatenateFields( extraBuffer );
-      std::memcpy( buffer + 46 + filenameLength, extraBuffer, extraLength );
+      std::unique_ptr<char[]> extraBuffer { new char[extraLength] };
+      extra->concatenateFields( extraBuffer.get() );
+      std::memcpy( buffer.get() + 46 + filenameLength, extraBuffer.get(), extraLength );
     }
 
     if ( commentLength > 0 )
-      std::memcpy( buffer + 46 + filenameLength + extraLength, comment.c_str(), commentLength );
+      std::memcpy( buffer.get() + 46 + filenameLength + extraLength, comment.c_str(), commentLength );
 
     // todo: error handling 
-    uint32_t bytes_written = write( archiveFd, buffer, cdfhSize );
+    uint32_t bytes_written = write( archiveFd, buffer.get(), cdfhSize );
     //std::cout << "CDFH bytes written: " << bytes_written << "\n";
     //std::cout << "CDFH extra length: " << extraLength << "\n";
   }
@@ -311,21 +311,21 @@ struct EOCD
 
   void Write( int archiveFd )
   {
-    char buffer[eocdSize];
-    std::memcpy( buffer, &eocdSign, 4 ); 
-    std::memcpy( buffer + 4, &nbDisk, 2 );
-    std::memcpy( buffer + 6, &nbDiskCd, 2 ); 
-    std::memcpy( buffer + 8, &nbCdRecD, 2 ); 
-    std::memcpy( buffer + 10, &nbCdRec, 2 ); 
-    std::memcpy( buffer + 12, &cdSize, 4 ); 
-    std::memcpy( buffer + 16, &cdOffset, 4 ); 
-    std::memcpy( buffer + 20, &commentLength, 2 ); 
+    std::unique_ptr<char[]> buffer { new char[eocdSize] };
+    std::memcpy( buffer.get(), &eocdSign, 4 ); 
+    std::memcpy( buffer.get() + 4, &nbDisk, 2 );
+    std::memcpy( buffer.get() + 6, &nbDiskCd, 2 ); 
+    std::memcpy( buffer.get() + 8, &nbCdRecD, 2 ); 
+    std::memcpy( buffer.get() + 10, &nbCdRec, 2 ); 
+    std::memcpy( buffer.get() + 12, &cdSize, 4 ); 
+    std::memcpy( buffer.get() + 16, &cdOffset, 4 ); 
+    std::memcpy( buffer.get() + 20, &commentLength, 2 ); 
     
     if ( commentLength > 0 )
-      std::memcpy( buffer + 22, comment.c_str(), commentLength ); 
+      std::memcpy( buffer.get() + 22, comment.c_str(), commentLength ); 
 
     // todo: error handling
-    uint32_t bytes_written = write( archiveFd, buffer, eocdSize );
+    uint32_t bytes_written = write( archiveFd, buffer.get(), eocdSize );
     //std::cout << "EOCD bytes written: " << bytes_written << "\n";
   }
 
@@ -395,23 +395,23 @@ struct ZIP64_EOCD
 
   void Write( int archiveFd )
   {
-    char buffer[zip64EocdTotalSize];
-    std::memcpy( buffer, &zip64EocdSign, 4 );
-    std::memcpy( buffer + 4, &zip64EocdSize, 8 );
-    std::memcpy( buffer + 12, &zipVersion, 2 );
-    std::memcpy( buffer + 14, &minZipVersion, 2 );
-    std::memcpy( buffer + 16, &nbDisk, 4 );
-    std::memcpy( buffer + 20, &nbDiskCd, 4 );
-    std::memcpy( buffer + 24, &nbCdRecD, 8 );
-    std::memcpy( buffer + 32, &nbCdRec, 8 );
-    std::memcpy( buffer + 40, &cdSize, 8 );
-    std::memcpy( buffer + 48, &cdOffset, 8 );
+    std::unique_ptr<char[]> buffer { new char[zip64EocdTotalSize] };
+    std::memcpy( buffer.get(), &zip64EocdSign, 4 );
+    std::memcpy( buffer.get() + 4, &zip64EocdSize, 8 );
+    std::memcpy( buffer.get() + 12, &zipVersion, 2 );
+    std::memcpy( buffer.get() + 14, &minZipVersion, 2 );
+    std::memcpy( buffer.get() + 16, &nbDisk, 4 );
+    std::memcpy( buffer.get() + 20, &nbDiskCd, 4 );
+    std::memcpy( buffer.get() + 24, &nbCdRecD, 8 );
+    std::memcpy( buffer.get() + 32, &nbCdRec, 8 );
+    std::memcpy( buffer.get() + 40, &cdSize, 8 );
+    std::memcpy( buffer.get() + 48, &cdOffset, 8 );
 
     if ( extensibleDataLength > 0 )
-      std::memcpy( buffer + 56, extensibleData.c_str(), extensibleDataLength );
+      std::memcpy( buffer.get() + 56, extensibleData.c_str(), extensibleDataLength );
 
     // todo: error handling 
-    uint64_t bytes_written = write( archiveFd, buffer, zip64EocdTotalSize );
+    uint64_t bytes_written = write( archiveFd, buffer.get(), zip64EocdTotalSize );
     //std::cout << "ZIP64 EOCD bytes written: " << bytes_written << "\n";
   }
 
@@ -460,14 +460,14 @@ struct ZIP64_EOCDL
 
   void Write( int archiveFd )
   {
-    char buffer[zip64EocdlSize];
-    std::memcpy( buffer, &zip64EocdlSign, 4 );
-    std::memcpy( buffer + 4, &nbDiskZip64Eocd, 4 );
-    std::memcpy( buffer + 8, &zip64EocdOffset, 8 );
-    std::memcpy( buffer + 16, &totalNbDisks, 4 );
+    std::unique_ptr<char[]> buffer { new char[zip64EocdlSize] };
+    std::memcpy( buffer.get(), &zip64EocdlSign, 4 );
+    std::memcpy( buffer.get() + 4, &nbDiskZip64Eocd, 4 );
+    std::memcpy( buffer.get() + 8, &zip64EocdOffset, 8 );
+    std::memcpy( buffer.get() + 16, &totalNbDisks, 4 );
 
     // todo: error handling 
-    uint16_t bytes_written = write( archiveFd, buffer, zip64EocdlSize );
+    uint16_t bytes_written = write( archiveFd, buffer.get(), zip64EocdlSize );
     //std::cout << "ZIP64 EOCDL bytes written: " << bytes_written << "\n";
   }
   
