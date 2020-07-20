@@ -20,7 +20,7 @@ struct ZipExtra
   {
     offset = 0;
     nbDisk = 0;
-    if ( fileSize > ovrflw32 )
+    if ( fileSize >= ovrflw32 )
     {
       dataSize = 16;
       uncompressedSize = fileSize;
@@ -43,7 +43,7 @@ struct ZipExtra
     compressedSize = extra->compressedSize;
     dataSize = extra->dataSize;
     totalSize = extra->totalSize;
-    if ( offset > ovrflw32 )
+    if ( offset >= ovrflw32 )
     {
       this->offset = offset;
       dataSize += 8;
@@ -91,7 +91,7 @@ struct LFH
     generalBitFlag = 0;
     compressionMethod = 0;
     ZCRC32 = crc;
-    if ( fileSize > ovrflw32 ) 
+    if ( fileSize >= ovrflw32 ) 
     {
       compressedSize = ovrflw32;
       uncompressedSize = ovrflw32;
@@ -190,7 +190,7 @@ struct CDFH
     nbDisk = 0;
     internAttr = 0;
     externAttr = mode << 16;
-    if ( lfhOffset > ovrflw32 ) 
+    if ( lfhOffset >= ovrflw32 ) 
       offset = ovrflw32;
     else
       offset = lfhOffset;   
@@ -293,7 +293,7 @@ struct EOCD
     nbDiskCd = 0;
     nbCdRecD = 1;
     nbCdRec = 1;
-    if ( lfh->compressedSize == ovrflw32 || lfh->lfhSize + lfh->compressedSize > ovrflw32 )
+    if ( lfh->compressedSize == ovrflw32 || lfh->lfhSize + lfh->compressedSize >= ovrflw32 )
     {
       cdOffset = ovrflw32;
       cdSize = ovrflw32;
@@ -573,7 +573,7 @@ class ZipArchive
           eocd->nbCdRecD += 1;
           eocd->nbCdRec += 1;
           
-          if ( eocd->cdSize + cdfh->cdfhSize > ovrflw32 || lfh->compressedSize == ovrflw32 || eocd->cdOffset + lfh->lfhSize + lfh->compressedSize > ovrflw32 )
+          if ( eocd->cdSize + cdfh->cdfhSize >= ovrflw32 || lfh->compressedSize == ovrflw32 || eocd->cdOffset + lfh->lfhSize + lfh->compressedSize >= ovrflw32 )
           {
             // overflown
             eocd->useZip64 = true;
