@@ -110,12 +110,12 @@ struct LFH
     this->filename = filename;
     filenameLength = this->filename.length();
     
-    MsdosDateTime( &time );
+    ToMsdosDateTime( &time );
 
     lfhSize = lfhBaseSize + filenameLength + extraLength;
   }
   
-  void MsdosDateTime( time_t *originalTime )
+  void ToMsdosDateTime( time_t *originalTime )
   {
     // convert from Epoch time to local time
     struct tm *t = localtime( originalTime );
