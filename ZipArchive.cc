@@ -697,28 +697,11 @@ class ZipArchive
       // todo: error handling
       write( archiveFd, cdBuffer.get(), existingCdSize );
     }
-    
-    // for testing purposes - not in final API
-    void WriteFileData( int inputFd )
-    {
-      std::cout << "Writing file data...\n";
-      int bytes_read;
-      int size = 10240;
-      buffer.reset( new char[size] );
-      uint64_t total_bytes = 0;
-      do
-      {
-        // todo: error handling for read and write
-        bytes_read = read( inputFd, buffer.get(), size );
-        write( archiveFd, buffer.get(), bytes_read );
-        total_bytes += bytes_read;
-      } 
-      while( bytes_read != 0 );
-      std::cout << "Finished writing file data.\n"; 
-      std::cout << "File data written: " << std::hex << total_bytes << "\n";
 
+    void WriteFileData( char *buffer, uint32_t size ) 
+    {
       // todo: error handling
-      close( inputFd );
+      write( archiveFd, buffer, size );
     }
 
     void Close()
@@ -755,26 +738,26 @@ int OpenInputFile( std::string inputFilename )
 }
 
 // for testing purposes - not in final API
-void test()
-{
-  std::string inputFilename = "bible.txt";
-  std::string inputFilename2 = "E.coli";
-  std::string inputFilename3 = "world192.txt";
-  int inputFd = OpenInputFile( inputFilename );
-  int inputFd2 = OpenInputFile( inputFilename2 );
-  int inputFd3 = OpenInputFile( inputFilename3 );
+// void test()
+// {
+//   std::string inputFilename = "bible.txt";
+//   std::string inputFilename2 = "E.coli";
+//   std::string inputFilename3 = "world192.txt";
+//   int inputFd = OpenInputFile( inputFilename );
+//   int inputFd2 = OpenInputFile( inputFilename2 );
+//   int inputFd3 = OpenInputFile( inputFilename3 );
 
-  ZipArchive *archive = new ZipArchive( "archive.zip" );
-  archive->Open();
-  archive->Append( inputFd, inputFilename, 0x75a16a5b );
-  archive->WriteFileData( inputFd );
-  archive->Append( inputFd2, inputFilename2, 0xe711a86e );
-  archive->WriteFileData( inputFd2 );
-  archive->Append( inputFd3, inputFilename3, 0x933325f6 );
-  archive->WriteFileData( inputFd3 );
-  archive->Finalize();
-  archive->Close();
-}
+//   ZipArchive *archive = new ZipArchive( "archive.zip" );
+//   archive->Open();
+//   archive->Append( inputFd, inputFilename, 0x75a16a5b );
+//   archive->WriteFileData( inputFd );
+//   archive->Append( inputFd2, inputFilename2, 0xe711a86e );
+//   archive->WriteFileData( inputFd2 );
+//   archive->Append( inputFd3, inputFilename3, 0x933325f6 );
+//   archive->WriteFileData( inputFd3 );
+//   archive->Finalize();
+//   archive->Close();
+// }
 
 // run as ./ZipArchive <input filename> <output filename>
 int main( int argc, char **argv )
@@ -802,11 +785,25 @@ int main( int argc, char **argv )
   ZipArchive *archive = new ZipArchive( archiveFilename );
   archive->Open();
   archive->Append( inputFd, inputFilename, crc );
-  archive->WriteFileData( inputFd );
+
+  std::cout << "Writing file data...\n";
+  int bytes_read = 0;
+  int size = 10240;
+  char buffer[size];
+  do
+  {
+    // todo: error handling
+    bytes_read = read( inputFd, buffer, size );
+    archive->WriteFileData( buffer, bytes_read );
+  } 
+  while( bytes_read != 0 );
+  std::cout << "Finished writing file data.\n"; 
+
+  // todo: error handling
+  close( inputFd );
+
   archive->Finalize();
   archive->Close();
 
   // test();
 }
-
- 
