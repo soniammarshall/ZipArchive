@@ -132,7 +132,7 @@ struct LFH
 
   void Write( int archiveFd )
   {
-    uint32_t size = lfhSize - extraLength;
+    uint16_t size = lfhSize - extraLength;
     std::unique_ptr<char[]> buffer { new char[size] };
     std::memcpy( buffer.get(), &lfhSign, 4 );
     std::memcpy( buffer.get() + 4, &minZipVersion, 2 );
@@ -166,7 +166,7 @@ struct LFH
   uint16_t extraLength;
   std::string filename;
   ZipExtra *extra;
-  uint32_t lfhSize;
+  uint16_t lfhSize;
   
   static const uint16_t lfhBaseSize = 30;
   static const uint32_t lfhSign = 0x04034b50;
@@ -207,7 +207,7 @@ struct CDFH
 
   void Write( int archiveFd )
   {
-    uint32_t size = cdfhSize - extraLength - commentLength;
+    uint16_t size = cdfhSize - extraLength - commentLength;
     std::unique_ptr<char[]> buffer { new char[size] };
     std::memcpy( buffer.get(), &cdfhSign, 4 );
     std::memcpy( buffer.get() + 4, &zipVersion, 2 );
@@ -239,7 +239,6 @@ struct CDFH
       // todo: error handling 
       write( archiveFd, comment.c_str(), commentLength );
     }
-
   }
 
   uint16_t zipVersion;
@@ -261,7 +260,7 @@ struct CDFH
   std::string filename;
   ZipExtra *extra;
   std::string comment;
-  uint32_t cdfhSize;
+  uint16_t cdfhSize;
  
   static const uint16_t cdfhBaseSize = 46;
   static const uint32_t cdfhSign = 0x02014b50;
@@ -337,7 +336,7 @@ struct EOCD
   uint32_t cdOffset;
   uint16_t commentLength;
   std::string comment;
-  uint32_t eocdSize;
+  uint16_t eocdSize;
   bool useZip64;
 
   static const uint16_t eocdBaseSize = 22;
@@ -424,7 +423,7 @@ struct ZIP64_EOCD
   uint64_t cdSize;
   uint64_t cdOffset;
   std::string extensibleData;
-  uint16_t extensibleDataLength;
+  uint64_t extensibleDataLength;
   uint64_t zip64EocdTotalSize;
 
   static const uint16_t zip64EocdBaseSize = 56;
