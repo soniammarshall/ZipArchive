@@ -11,7 +11,9 @@
 #include <vector>
 #include <memory>
 
+const uint16_t ovrflw16 = 0xffff;
 const uint32_t ovrflw32 = 0xffffffff;
+const uint64_t ovrflw64 = 0xffffffffffffffff;
 
 // ZIP64 extended information extra field
 struct ZipExtra
@@ -72,7 +74,8 @@ struct ZipExtra
 
       // todo: error handling
       lseek( archiveFd, writeOffset, SEEK_SET );
-      write( archiveFd, buffer.get(), totalSize );
+      uint16_t bytesWritten = write( archiveFd, buffer.get(), totalSize );
+      if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
       /* todo
       - change function argument to include the archive
       XRootDStatus st =	archive.Write( writeOffset, totalSize, buffer.get(), 0);
@@ -156,7 +159,8 @@ struct LFH
 
     // todo: error handling
     lseek( archiveFd, writeOffset, SEEK_SET );
-    write( archiveFd, buffer.get(), size );
+    uint16_t bytesWritten = write( archiveFd, buffer.get(), size );
+    if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
     /* todo
     - change function argument to include the archive
     XRootDStatus st =	archive.Write( writeOffset, size, buffer.get(), 0);
@@ -244,7 +248,8 @@ struct CDFH
 
     // todo: error handling 
     lseek( archiveFd, writeOffset, SEEK_SET );
-    write( archiveFd, buffer.get(), size );
+    uint16_t bytesWritten = write( archiveFd, buffer.get(), size );
+    if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
     /* todo
     - change function argument to include the archive
     XRootDStatus st =	archive.Write( writeOffset, size, buffer.get(), 0);
@@ -262,7 +267,8 @@ struct CDFH
     {
       // todo: error handling 
       lseek( archiveFd, writeOffset, SEEK_SET );
-      write( archiveFd, comment.c_str(), commentLength );
+      bytesWritten = write( archiveFd, comment.c_str(), commentLength );
+      if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
       /* todo
       XRootDStatus st =	archive.Write( writeOffset, commentLength, comment.c_str(), 0);
       if( !st.IsOK() ) {} // error handling
@@ -355,7 +361,8 @@ struct EOCD
 
     // todo: error handling
     lseek( archiveFd, writeOffset, SEEK_SET );
-    write( archiveFd, buffer.get(), eocdSize );
+    uint16_t bytesWritten = write( archiveFd, buffer.get(), eocdSize );
+    if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
     /* todo
     - change function argument to include the archive
     XRootDStatus st =	archive.Write( writeOffset, eocdSize, buffer.get(), 0);
@@ -446,7 +453,8 @@ struct ZIP64_EOCD
 
     // todo: error handling 
     lseek( archiveFd, writeOffset, SEEK_SET );
-    write( archiveFd, buffer.get(), zip64EocdTotalSize );
+    uint64_t bytesWritten = write( archiveFd, buffer.get(), zip64EocdTotalSize );
+    if ( bytesWritten == ovrflw64 ) std::cout << "Write failed.\n";
     /* todo
     - change function argument to include the archive
     XRootDStatus st =	archive.Write( writeOffset, zip64EocdTotalSize, buffer.get(), 0);
@@ -507,7 +515,8 @@ struct ZIP64_EOCDL
 
     // todo: error handling 
     lseek( archiveFd, writeOffset, SEEK_SET );
-    write( archiveFd, buffer.get(), zip64EocdlSize );
+    uint16_t bytesWritten = write( archiveFd, buffer.get(), zip64EocdlSize );
+    if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
     /* todo
     - change function argument to include the archive
     XRootDStatus st =	archive.Write( writeOffset, zip64EocdlSize, buffer.get(), 0);
@@ -587,7 +596,8 @@ class ZipArchive
         buffer.reset( new char[size] );
         // todo: error handling
         lseek( archiveFd, offset, SEEK_SET );
-        read( archiveFd, buffer.get(), size );
+        uint32_t bytesRead = read( archiveFd, buffer.get(), size );
+        if ( bytesRead == ovrflw32 ) std::cout << "Read failed.\n";
         /* todo
         uint32_t bytesRead = 0;
         XRootDStatus st = archive.Read( offset, size, buffer.get(), bytesRead, 0);
@@ -716,7 +726,8 @@ class ZipArchive
             buffer.reset( new char[size] );
             // todo: error handling
             lseek( archiveFd, zip64Eocdl->zip64EocdOffset, SEEK_SET );
-            read( archiveFd, buffer.get(), size );
+            bytesRead = read( archiveFd, buffer.get(), size );
+            if ( bytesRead == ovrflw32 ) std::cout << "Read failed.\n";
             /* todo
             uint32_t bytesRead = 0;
             XRootDStatus st = archive.Read( zip64Eocdl->zip64EocdOffset, size, buffer.get(), bytesRead, 0);
@@ -742,7 +753,8 @@ class ZipArchive
       cdBuffer.reset( new char[existingCdSize] );
       // todo: error handling
       lseek( archiveFd, offset, SEEK_SET );
-      read( archiveFd, cdBuffer.get(), existingCdSize );
+      bytesRead = read( archiveFd, cdBuffer.get(), existingCdSize );
+      if ( bytesRead == ovrflw32 ) std::cout << "Read failed.\n";
       /* todo
       uint32_t bytesRead = 0;
       XRootDStatus st = archive.Read( offset, existingCdSize, cdBuffer.get(), bytesRead, 0);
@@ -760,7 +772,7 @@ class ZipArchive
         WriteExistingCd();
         writeOffset += existingCdSize;
       }
-      for ( int i=0; i<cdRecords.size(); i++)
+      for ( uint16_t i=0; i<cdRecords.size(); i++)
       {
         cdRecords[i]->Write( archiveFd, writeOffset );
         writeOffset += cdRecords[i]->cdfhSize;
@@ -780,7 +792,8 @@ class ZipArchive
     {
       // todo: error handling
       lseek( archiveFd, writeOffset, SEEK_SET );
-      write( archiveFd, cdBuffer.get(), existingCdSize );
+      uint32_t bytesWritten = write( archiveFd, cdBuffer.get(), existingCdSize );
+      if ( bytesWritten == ovrflw32 ) std::cout << "Write failed.\n";
       /* todo
       XRootDStatus st =	archive.Write( writeOffset, existingCdSize, cdBuffer.get(), 0);
       if( !st.IsOK() ) {} // error handling
@@ -792,7 +805,8 @@ class ZipArchive
     {
       // todo: error handling
       lseek( archiveFd, writeOffset + fileOffset, SEEK_SET );
-      write( archiveFd, buffer, size );
+      uint32_t bytesWritten = write( archiveFd, buffer, size );
+      if ( bytesWritten == ovrflw32 ) std::cout << "Write failed.\n";
       /* todo
       XRootDStatus st =	archive.Write( writeOffset + fileOffset, size, buffer, 0);
       if( !st.IsOK() ) {} // error handling
@@ -895,19 +909,20 @@ int main( int argc, char **argv )
   archive->Append( inputFd, inputFilename, crc );
 
   std::cout << "Writing file data...\n";
-  int bytes_read = 0;
+  uint32_t bytesRead = 0;
   uint64_t fileOffset = 0;
-  int size = 10240;
+  uint32_t size = 10240;
   char buffer[size];
   do
   {
     // todo: error handling
     lseek( inputFd, fileOffset, SEEK_SET );
-    bytes_read = read( inputFd, buffer, size );
-    archive->WriteFileData( buffer, bytes_read, fileOffset );
-    fileOffset += bytes_read;
+    bytesRead = read( inputFd, buffer, size );
+    if ( bytesRead == ovrflw32 ) std::cout << "Read failed.\n";
+    archive->WriteFileData( buffer, bytesRead, fileOffset );
+    fileOffset += bytesRead;
   } 
-  while( bytes_read != 0 );
+  while( bytesRead != 0 );
   std::cout << "Finished writing file data.\n"; 
 
   // todo: error handling
