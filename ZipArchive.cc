@@ -73,6 +73,11 @@ struct ZipExtra
       // todo: error handling
       lseek( archiveFd, writeOffset, SEEK_SET );
       write( archiveFd, buffer.get(), totalSize );
+      /* todo
+      - change function argument to include the archive
+      XRootDStatus st =	archive.Write( writeOffset, totalSize, buffer.get(), 0);
+      if( !st.IsOK() ) {} // error handling
+      */
     }
   }
 
@@ -152,6 +157,11 @@ struct LFH
     // todo: error handling
     lseek( archiveFd, writeOffset, SEEK_SET );
     write( archiveFd, buffer.get(), size );
+    /* todo
+    - change function argument to include the archive
+    XRootDStatus st =	archive.Write( writeOffset, size, buffer.get(), 0);
+    if( !st.IsOK() ) {} // error handling
+    */
     writeOffset += size;
     
     if ( extraLength > 0 )
@@ -235,6 +245,11 @@ struct CDFH
     // todo: error handling 
     lseek( archiveFd, writeOffset, SEEK_SET );
     write( archiveFd, buffer.get(), size );
+    /* todo
+    - change function argument to include the archive
+    XRootDStatus st =	archive.Write( writeOffset, size, buffer.get(), 0);
+    if( !st.IsOK() ) {} // error handling
+    */
     writeOffset += size;
     
     if ( extraLength > 0 )
@@ -248,6 +263,10 @@ struct CDFH
       // todo: error handling 
       lseek( archiveFd, writeOffset, SEEK_SET );
       write( archiveFd, comment.c_str(), commentLength );
+      /* todo
+      XRootDStatus st =	archive.Write( writeOffset, commentLength, comment.c_str(), 0);
+      if( !st.IsOK() ) {} // error handling
+      */
     }
   }
 
@@ -337,6 +356,11 @@ struct EOCD
     // todo: error handling
     lseek( archiveFd, writeOffset, SEEK_SET );
     write( archiveFd, buffer.get(), eocdSize );
+    /* todo
+    - change function argument to include the archive
+    XRootDStatus st =	archive.Write( writeOffset, eocdSize, buffer.get(), 0);
+    if( !st.IsOK() ) {} // error handling
+    */
   }
 
   uint16_t nbDisk;
@@ -423,6 +447,11 @@ struct ZIP64_EOCD
     // todo: error handling 
     lseek( archiveFd, writeOffset, SEEK_SET );
     write( archiveFd, buffer.get(), zip64EocdTotalSize );
+    /* todo
+    - change function argument to include the archive
+    XRootDStatus st =	archive.Write( writeOffset, zip64EocdTotalSize, buffer.get(), 0);
+    if( !st.IsOK() ) {} // error handling
+    */
   }
 
   uint64_t zip64EocdSize;
@@ -479,6 +508,11 @@ struct ZIP64_EOCDL
     // todo: error handling 
     lseek( archiveFd, writeOffset, SEEK_SET );
     write( archiveFd, buffer.get(), zip64EocdlSize );
+    /* todo
+    - change function argument to include the archive
+    XRootDStatus st =	archive.Write( writeOffset, zip64EocdlSize, buffer.get(), 0);
+    if( !st.IsOK() ) {} // error handling
+    */
   }
   
   uint32_t nbDiskZip64Eocd;
@@ -510,7 +544,7 @@ class ZipArchive
       - should timeout be 0 or something else?
       - how can I tell if the file already exists or not? change the second open call to fit the answer
       XRootDStatus st = archive.Open( archiveUrl, OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR, 0);
-      if( !st.IsOK() ) {} // error handling!
+      if( !st.IsOK() ) {} // error handling
       */
       archiveFd = open( archiveFilename.c_str(), O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
 
@@ -554,6 +588,11 @@ class ZipArchive
         // todo: error handling
         lseek( archiveFd, offset, SEEK_SET );
         read( archiveFd, buffer.get(), size );
+        /* todo
+        uint32_t bytesRead = 0;
+        XRootDStatus st = archive.Read( offset, size, buffer.get(), bytesRead, 0);
+        if( !st.IsOK() ) {} // error handling
+        */
 
         // find and store existing EOCD, ZIP64EOCD, ZIP64EOCDL and central directory records
         ReadCentralDirectory( size );
@@ -562,6 +601,7 @@ class ZipArchive
     
     void Append( int inputFd, std::string inputFilename, uint32_t crc )
     {
+      // todo: maybe move this out, have fileInfo as an argument to this function
       struct stat fileInfo;
       if ( fstat( inputFd, &fileInfo ) == -1 )
       {
@@ -677,6 +717,11 @@ class ZipArchive
             // todo: error handling
             lseek( archiveFd, zip64Eocdl->zip64EocdOffset, SEEK_SET );
             read( archiveFd, buffer.get(), size );
+            /* todo
+            uint32_t bytesRead = 0;
+            XRootDStatus st = archive.Read( zip64Eocdl->zip64EocdOffset, size, buffer.get(), bytesRead, 0);
+            if( !st.IsOK() ) {} // error handling
+            */
           }
 
           char *zip64EocdBlock = buffer.get() + ( zip64Eocdl->zip64EocdOffset - buffOffset );
@@ -698,6 +743,11 @@ class ZipArchive
       // todo: error handling
       lseek( archiveFd, offset, SEEK_SET );
       read( archiveFd, cdBuffer.get(), existingCdSize );
+      /* todo
+      uint32_t bytesRead = 0;
+      XRootDStatus st = archive.Read( offset, existingCdSize, cdBuffer.get(), bytesRead, 0);
+      if( !st.IsOK() ) {} // error handling
+      */
     }
 
     void Finalize()
@@ -731,6 +781,11 @@ class ZipArchive
       // todo: error handling
       lseek( archiveFd, writeOffset, SEEK_SET );
       write( archiveFd, cdBuffer.get(), existingCdSize );
+      /* todo
+      XRootDStatus st =	archive.Write( writeOffset, existingCdSize, cdBuffer.get(), 0);
+      if( !st.IsOK() ) {} // error handling
+      */
+      
     }
 
     void WriteFileData( char *buffer, uint32_t size, uint64_t fileOffset ) 
@@ -738,6 +793,10 @@ class ZipArchive
       // todo: error handling
       lseek( archiveFd, writeOffset + fileOffset, SEEK_SET );
       write( archiveFd, buffer, size );
+      /* todo
+      XRootDStatus st =	archive.Write( writeOffset + fileOffset, size, buffer, 0);
+      if( !st.IsOK() ) {} // error handling
+      */
     }
 
     void Close()
@@ -746,22 +805,23 @@ class ZipArchive
       close ( archiveFd );
       /* todo
       - check if timeout should be 0 or something else?
-      archive.Close( 0 );
+      XRootDStatus st = archive.Close( 0 );
+      if( !st.IsOK() ) {} // error handling
       */
     }
 
   private:
     /* todo
-    File                    &archive;
+    File                   &archive;
     std::string             archiveUrl;
     */
     int                     archiveFd;
     std::string             archiveFilename;
     uint64_t                archiveSize;
     std::vector<CDFH*>      cdRecords;
-    EOCD                    *eocd;
-    ZIP64_EOCD              *zip64Eocd;
-    ZIP64_EOCDL             *zip64Eocdl;
+    EOCD                   *eocd;
+    ZIP64_EOCD             *zip64Eocd;
+    ZIP64_EOCDL            *zip64Eocdl;
     std::unique_ptr<char[]> buffer;
     std::unique_ptr<char[]> cdBuffer;
     uint32_t                existingCdSize;
