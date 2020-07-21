@@ -11,15 +11,9 @@
 #include <vector>
 #include <memory>
 
-/*
-With this code you can create a new ZIP archive or append a file to an existing 
-ZIP archive, with support for large files using the ZIP64 specification.
-
-This is the plain C++ code that works with local files, before I modify it to use 
-the xrootd calls to enable support for working with remote files using xrootd.
-*/
-
+const uint16_t ovrflw16 = 0xffff;
 const uint32_t ovrflw32 = 0xffffffff;
+const uint64_t ovrflw64 = 0xffffffffffffffff;
 
 // ZIP64 extended information extra field
 struct ZipExtra
@@ -60,8 +54,8 @@ struct ZipExtra
     else
       this->offset = 0;
   }
- 
-  void Write( int archiveFd )
+
+  void Write( int archiveFd, uint64_t writeOffset )
   {
     if ( totalSize > 0 )
     {
@@ -77,11 +71,14 @@ struct ZipExtra
       }
       else if ( offset > 0 )
         std::memcpy( buffer.get() + 4, &offset, 8 );
+
       // todo: error handling
-      write( archiveFd, buffer.get(), totalSize );
+      lseek( archiveFd, writeOffset, SEEK_SET );
+      uint16_t bytesWritten = write( archiveFd, buffer.get(), totalSize );
+      if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
     }
   }
- 
+
   static const uint16_t headerID = 0x0001;
   uint16_t dataSize;
   uint64_t uncompressedSize;
@@ -138,7 +135,7 @@ struct LFH
     lastModFileDate =  ( year << 9 ) | ( month << 5 ) | day ;
   }
 
-  void Write( int archiveFd )
+  void Write( int archiveFd, uint64_t writeOffset )
   {
     uint16_t size = lfhSize - extraLength;
     std::unique_ptr<char[]> buffer { new char[size] };
@@ -155,13 +152,16 @@ struct LFH
     std::memcpy( buffer.get() + 28, &extraLength, 2 );
     std::memcpy( buffer.get() + 30, filename.c_str(), filenameLength );
 
-    // todo: error handling 
-    write( archiveFd, buffer.get(), size );
+    // todo: error handling
+    lseek( archiveFd, writeOffset, SEEK_SET );
+    uint16_t bytesWritten = write( archiveFd, buffer.get(), size );
+    if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
+    writeOffset += size;
     
     if ( extraLength > 0 )
-      extra->Write( archiveFd );
+      extra->Write( archiveFd, writeOffset );
   }
- 
+
   uint16_t minZipVersion;
   uint16_t generalBitFlag;
   uint16_t compressionMethod;
@@ -213,7 +213,7 @@ struct CDFH
     cdfhSize = cdfhBaseSize + filenameLength + extraLength + commentLength;
   }
 
-  void Write( int archiveFd )
+  void Write( int archiveFd, uint64_t writeOffset )
   {
     uint16_t size = cdfhSize - extraLength - commentLength;
     std::unique_ptr<char[]> buffer { new char[size] };
@@ -237,15 +237,23 @@ struct CDFH
     std::memcpy( buffer.get() + 46, filename.c_str(), filenameLength );
 
     // todo: error handling 
-    write( archiveFd, buffer.get(), size );
+    lseek( archiveFd, writeOffset, SEEK_SET );
+    uint16_t bytesWritten = write( archiveFd, buffer.get(), size );
+    if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
+    writeOffset += size;
     
     if ( extraLength > 0 )
-      extra->Write( archiveFd );
+    {
+      extra->Write( archiveFd, writeOffset );
+      writeOffset += extraLength;
+    }
 
     if ( commentLength > 0 )
     {
       // todo: error handling 
-      write( archiveFd, comment.c_str(), commentLength );
+      lseek( archiveFd, writeOffset, SEEK_SET );
+      bytesWritten = write( archiveFd, comment.c_str(), commentLength );
+      if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
     }
   }
 
@@ -269,7 +277,7 @@ struct CDFH
   ZipExtra *extra;
   std::string comment;
   uint16_t cdfhSize;
- 
+
   static const uint16_t cdfhBaseSize = 46;
   static const uint32_t cdfhSign = 0x02014b50;
 };
@@ -317,7 +325,7 @@ struct EOCD
     eocdSize = eocdBaseSize + commentLength;
   }
 
-  void Write( int archiveFd )
+  void Write( int archiveFd, uint64_t writeOffset )
   {
     std::unique_ptr<char[]> buffer { new char[eocdSize] };
     std::memcpy( buffer.get(), &eocdSign, 4 ); 
@@ -333,7 +341,9 @@ struct EOCD
       std::memcpy( buffer.get() + 22, comment.c_str(), commentLength ); 
 
     // todo: error handling
-    write( archiveFd, buffer.get(), eocdSize );
+    lseek( archiveFd, writeOffset, SEEK_SET );
+    uint16_t bytesWritten = write( archiveFd, buffer.get(), eocdSize );
+    if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
   }
 
   uint16_t nbDisk;
@@ -400,7 +410,7 @@ struct ZIP64_EOCD
     zip64EocdTotalSize = zip64EocdBaseSize + extensibleDataLength;
   }
 
-  void Write( int archiveFd )
+  void Write( int archiveFd, uint64_t writeOffset )
   {
     std::unique_ptr<char[]> buffer { new char[zip64EocdTotalSize] };
     std::memcpy( buffer.get(), &zip64EocdSign, 4 );
@@ -418,7 +428,9 @@ struct ZIP64_EOCD
       std::memcpy( buffer.get() + 56, extensibleData.c_str(), extensibleDataLength );
 
     // todo: error handling 
-    write( archiveFd, buffer.get(), zip64EocdTotalSize );
+    lseek( archiveFd, writeOffset, SEEK_SET );
+    uint64_t bytesWritten = write( archiveFd, buffer.get(), zip64EocdTotalSize );
+    if ( bytesWritten == ovrflw64 ) std::cout << "Write failed.\n";
   }
 
   uint64_t zip64EocdSize;
@@ -464,7 +476,7 @@ struct ZIP64_EOCDL
       zip64EocdOffset += eocd->cdSize;
   }
 
-  void Write( int archiveFd )
+  void Write( int archiveFd, uint64_t writeOffset )
   {
     std::unique_ptr<char[]> buffer { new char[zip64EocdlSize] };
     std::memcpy( buffer.get(), &zip64EocdlSign, 4 );
@@ -473,7 +485,9 @@ struct ZIP64_EOCDL
     std::memcpy( buffer.get() + 16, &totalNbDisks, 4 );
 
     // todo: error handling 
-    write( archiveFd, buffer.get(), zip64EocdlSize );
+    lseek( archiveFd, writeOffset, SEEK_SET );
+    uint16_t bytesWritten = write( archiveFd, buffer.get(), zip64EocdlSize );
+    if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
   }
   
   uint32_t nbDiskZip64Eocd;
@@ -491,6 +505,7 @@ class ZipArchive
     ZipArchive( std::string archiveFilename )
     {
       this->archiveFilename = archiveFilename;
+      writeOffset = 0;
     }
     
     void Open()
@@ -533,7 +548,8 @@ class ZipArchive
         buffer.reset( new char[size] );
         // todo: error handling
         lseek( archiveFd, offset, SEEK_SET );
-        read( archiveFd, buffer.get(), size );
+        uint32_t bytesRead = read( archiveFd, buffer.get(), size );
+        if ( bytesRead == ovrflw32 ) std::cout << "Read failed.\n";
 
         // find and store existing EOCD, ZIP64EOCD, ZIP64EOCDL and central directory records
         ReadCentralDirectory( size );
@@ -542,6 +558,7 @@ class ZipArchive
     
     void Append( int inputFd, std::string inputFilename, uint32_t crc )
     {
+      // todo: maybe move this out, have fileInfo as an argument to this function
       struct stat fileInfo;
       if ( fstat( inputFd, &fileInfo ) == -1 )
       {
@@ -614,9 +631,9 @@ class ZipArchive
 
       // write local file header to the archive
       // todo: error handling
-      uint64_t offset = ( cdfh->offset == ovrflw32 ) ? cdfh->extra->offset : cdfh->offset;
-      lseek( archiveFd, offset, SEEK_SET );
-      lfh->Write( archiveFd );
+      writeOffset = ( cdfh->offset == ovrflw32 ) ? cdfh->extra->offset : cdfh->offset;
+      lfh->Write( archiveFd, writeOffset );
+      writeOffset += lfh->lfhSize;
     }
 
     // taken from ZipArchiveReader.cc (modified variable names)
@@ -656,7 +673,8 @@ class ZipArchive
             buffer.reset( new char[size] );
             // todo: error handling
             lseek( archiveFd, zip64Eocdl->zip64EocdOffset, SEEK_SET );
-            read( archiveFd, buffer.get(), size );
+            bytesRead = read( archiveFd, buffer.get(), size );
+            if ( bytesRead == ovrflw32 ) std::cout << "Read failed.\n";
           }
 
           char *zip64EocdBlock = buffer.get() + ( zip64Eocdl->zip64EocdOffset - buffOffset );
@@ -677,43 +695,54 @@ class ZipArchive
       cdBuffer.reset( new char[existingCdSize] );
       // todo: error handling
       lseek( archiveFd, offset, SEEK_SET );
-      read( archiveFd, cdBuffer.get(), existingCdSize );
+      bytesRead = read( archiveFd, cdBuffer.get(), existingCdSize );
+      if ( bytesRead == ovrflw32 ) std::cout << "Read failed.\n";
     }
 
     void Finalize()
     {
-      uint64_t offset = zip64Eocd ? zip64Eocd->cdOffset : eocd->cdOffset;
+      writeOffset = zip64Eocd ? zip64Eocd->cdOffset : eocd->cdOffset;
       //todo: error handling
-      lseek( archiveFd, offset, SEEK_SET );
       // write central directory records to archive
       if ( existingCdSize > 0 )
+      {
         WriteExistingCd();
-      for ( int i=0; i<cdRecords.size(); i++)
-        cdRecords[i]->Write( archiveFd );
+        writeOffset += existingCdSize;
+      }
+      for ( uint16_t i=0; i<cdRecords.size(); i++)
+      {
+        cdRecords[i]->Write( archiveFd, writeOffset );
+        writeOffset += cdRecords[i]->cdfhSize;
+      }
       // write EOCD to archive
       if ( eocd->useZip64 )
       {
-        zip64Eocd->Write( archiveFd );
-        zip64Eocdl->Write( archiveFd );
+        zip64Eocd->Write( archiveFd, writeOffset );
+        writeOffset += zip64Eocd->zip64EocdTotalSize;
+        zip64Eocdl->Write( archiveFd, writeOffset );
+        writeOffset += ZIP64_EOCDL::zip64EocdlSize;
       }
-      eocd->Write( archiveFd );
+      eocd->Write( archiveFd, writeOffset );
     }
 
     void WriteExistingCd()
     {
       // todo: error handling
-      write( archiveFd, cdBuffer.get(), existingCdSize );
+      lseek( archiveFd, writeOffset, SEEK_SET );
+      uint32_t bytesWritten = write( archiveFd, cdBuffer.get(), existingCdSize );
+      if ( bytesWritten == ovrflw32 ) std::cout << "Write failed.\n";      
     }
 
-    void WriteFileData( char *buffer, uint32_t size ) 
+    void WriteFileData( char *buffer, uint32_t size, uint64_t fileOffset ) 
     {
       // todo: error handling
-      write( archiveFd, buffer, size );
+      lseek( archiveFd, writeOffset + fileOffset, SEEK_SET );
+      uint32_t bytesWritten = write( archiveFd, buffer, size );
+      if ( bytesWritten == ovrflw32 ) std::cout << "Write failed.\n";
     }
 
     void Close()
     {
-      // close the archive
       // todo: error handling
       close ( archiveFd );
     }
@@ -723,12 +752,13 @@ class ZipArchive
     std::string             archiveFilename;
     uint64_t                archiveSize;
     std::vector<CDFH*>      cdRecords;
-    EOCD                    *eocd;
-    ZIP64_EOCD              *zip64Eocd;
-    ZIP64_EOCDL             *zip64Eocdl;
+    EOCD                   *eocd;
+    ZIP64_EOCD             *zip64Eocd;
+    ZIP64_EOCDL            *zip64Eocdl;
     std::unique_ptr<char[]> buffer;
     std::unique_ptr<char[]> cdBuffer;
     uint32_t                existingCdSize;
+    uint64_t                writeOffset;
 };
 
 // for testing purposes - not in final API
@@ -794,16 +824,20 @@ int main( int argc, char **argv )
   archive->Append( inputFd, inputFilename, crc );
 
   std::cout << "Writing file data...\n";
-  int bytes_read = 0;
-  int size = 10240;
+  uint32_t bytesRead = 0;
+  uint64_t fileOffset = 0;
+  uint32_t size = 10240;
   char buffer[size];
   do
   {
     // todo: error handling
-    bytes_read = read( inputFd, buffer, size );
-    archive->WriteFileData( buffer, bytes_read );
+    lseek( inputFd, fileOffset, SEEK_SET );
+    bytesRead = read( inputFd, buffer, size );
+    if ( bytesRead == ovrflw32 ) std::cout << "Read failed.\n";
+    archive->WriteFileData( buffer, bytesRead, fileOffset );
+    fileOffset += bytesRead;
   } 
-  while( bytes_read != 0 );
+  while( bytesRead != 0 );
   std::cout << "Finished writing file data.\n"; 
 
   // todo: error handling
