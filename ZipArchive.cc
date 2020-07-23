@@ -1,4 +1,4 @@
-//#include "XrdCl/XrdClZipArchiveWriter.hh"
+#include "XrdCl/XrdClZipArchiveWriter.hh"
 
 #include <sys/stat.h>
 #include <fcntl.h>
