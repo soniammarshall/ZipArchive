@@ -1,4 +1,4 @@
-#include "XrdCl/XrdClZipArchiveWriter.hh"
+//#include "XrdCl/XrdClZipArchiveWriter.hh"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -851,96 +851,97 @@ namespace XrdCl
       uint32_t                existingCdSize;
       uint64_t                writeOffset;
   };
+}
 
-  // for testing purposes - not in final API
-  int OpenInputFile( std::string inputFilename )
+// for testing purposes - not in final API
+int OpenInputFile( std::string inputFilename )
+{
+  // open input file for reading
+  int inputFd = open( inputFilename.c_str(), O_RDONLY );
+  if ( inputFd == -1 )
   {
-    // open input file for reading
-    int inputFd = open( inputFilename.c_str(), O_RDONLY );
-    if ( inputFd == -1 )
-    {
-      // todo: proper error handling
-      std::cout << "Could not open " << inputFilename << "\n";  
-    }
-    return inputFd;
+    // todo: proper error handling
+    std::cout << "Could not open " << inputFilename << "\n";  
   }
+  return inputFd;
+}
 
-  // for testing purposes - not in final API
-  // void test()
-  // {
-  //   std::string inputFilename = "bible.txt";
-  //   std::string inputFilename2 = "E.coli";
-  //   std::string inputFilename3 = "world192.txt";
-  //   int inputFd = OpenInputFile( inputFilename );
-  //   int inputFd2 = OpenInputFile( inputFilename2 );
-  //   int inputFd3 = OpenInputFile( inputFilename3 );
+// for testing purposes - not in final API
+// void test()
+// {
+//   std::string inputFilename = "bible.txt";
+//   std::string inputFilename2 = "E.coli";
+//   std::string inputFilename3 = "world192.txt";
+//   int inputFd = OpenInputFile( inputFilename );
+//   int inputFd2 = OpenInputFile( inputFilename2 );
+//   int inputFd3 = OpenInputFile( inputFilename3 );
 
-  //   ZipArchive *archive = new ZipArchive( "archive.zip" );
-  //   archive->Open();
-  //   archive->Append( inputFd, inputFilename, 0x75a16a5b );
-  //   archive->WriteFileData( inputFd );
-  //   archive->Append( inputFd2, inputFilename2, 0xe711a86e );
-  //   archive->WriteFileData( inputFd2 );
-  //   archive->Append( inputFd3, inputFilename3, 0x933325f6 );
-  //   archive->WriteFileData( inputFd3 );
-  //   archive->Finalize();
-  //   archive->Close();
-  // }
+//   ZipArchive *archive = new ZipArchive( "archive.zip" );
+//   archive->Open();
+//   archive->Append( inputFd, inputFilename, 0x75a16a5b );
+//   archive->WriteFileData( inputFd );
+//   archive->Append( inputFd2, inputFilename2, 0xe711a86e );
+//   archive->WriteFileData( inputFd2 );
+//   archive->Append( inputFd3, inputFilename3, 0x933325f6 );
+//   archive->WriteFileData( inputFd3 );
+//   archive->Finalize();
+//   archive->Close();
+// }
 
-  // run as ./ZipArchive <input filename> <output filename>
-  int main( int argc, char **argv )
+// run as ./ZipArchive <input filename> <output filename>
+int main( int argc, char **argv )
+{
+  std::string inputFilename = "file.txt";
+  std::string archiveFilename = "archive.zip"; 
+  // uncomment crc when zipping file.txt
+  //uint32_t crc = 0x797b4b0e;
+  // uncomment crc when zipping 4GB.dat
+  uint32_t crc = 0x756db3ac;
+  if (argc >= 3)
   {
-    std::string inputFilename = "file.txt";
-    std::string archiveFilename = "archive.zip"; 
-    // uncomment crc when zipping file.txt
-    //uint32_t crc = 0x797b4b0e;
-    // uncomment crc when zipping 4GB.dat
-    uint32_t crc = 0x756db3ac;
-    if (argc >= 3)
-    {
-      inputFilename = argv[1];
-      archiveFilename = argv[2];
-    }
-    else 
-      std::cout << "No args given, using defaults.\n";
+    inputFilename = argv[1];
+    archiveFilename = argv[2];
+  }
+  else 
+    std::cout << "No args given, using defaults.\n";
 
-    std::cout << "Input file: " << inputFilename << "\n";
-    std::cout << "Output file: " << archiveFilename << "\n";
-    std::cout << "crc: " << std::hex << crc << "\n"; 
+  std::cout << "Input file: " << inputFilename << "\n";
+  std::cout << "Output file: " << archiveFilename << "\n";
+  std::cout << "crc: " << std::hex << crc << "\n"; 
 
-    int inputFd = OpenInputFile( inputFilename );
+  int inputFd = OpenInputFile( inputFilename );
 
-    /* todo
-    - declare and assign archiveUrl above
-    ZipArchive *archive = new ZipArchive( archiveUrl );
-    */
-    ZipArchive *archive = new ZipArchive( archiveFilename );
-    archive->Open();
-    archive->Append( inputFd, inputFilename, crc );
+  /* todo
+  - declare and assign archiveUrl above
+  ZipArchive *archive = new ZipArchive( archiveUrl );
+  */
+  XrdCl::ZipArchive *archive = new XrdCl::ZipArchive( archiveFilename );
+  archive->Open();
+  archive->Append( inputFd, inputFilename, crc );
 
-    std::cout << "Writing file data...\n";
-    uint32_t bytesRead = 0;
-    uint64_t fileOffset = 0;
-    uint32_t size = 10240;
-    char buffer[size];
-    do
-    {
-      // todo: error handling
-      lseek( inputFd, fileOffset, SEEK_SET );
-      bytesRead = read( inputFd, buffer, size );
-      if ( bytesRead == ovrflw32 ) std::cout << "Read failed.\n";
-      archive->WriteFileData( buffer, bytesRead, fileOffset );
-      fileOffset += bytesRead;
-    } 
-    while( bytesRead != 0 );
-    std::cout << "Finished writing file data.\n"; 
-
+  std::cout << "Writing file data...\n";
+  uint32_t bytesRead = 0;
+  uint64_t fileOffset = 0;
+  uint32_t size = 10240;
+  char buffer[size];
+  do
+  {
     // todo: error handling
-    close( inputFd );
+    lseek( inputFd, fileOffset, SEEK_SET );
+    bytesRead = read( inputFd, buffer, size );
+    if ( bytesRead == XrdCl::ovrflw32 ) std::cout << "Read failed.\n";
+    archive->WriteFileData( buffer, bytesRead, fileOffset );
+    fileOffset += bytesRead;
+  } 
+  while( bytesRead != 0 );
+  std::cout << "Finished writing file data.\n"; 
 
-    archive->Finalize();
-    archive->Close();
+  // todo: error handling
+  close( inputFd );
 
-    // test();
-  }
+  archive->Finalize();
+  archive->Close();
+
+  // test();
+  return 0;
 }
