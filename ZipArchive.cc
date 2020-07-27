@@ -1,4 +1,6 @@
 #include "XrdCl/XrdClFile.hh"
+#include "XrdCl/XrdClFileSystem.hh"
+#include "XrdCl/XrdClURL.hh"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -510,19 +512,49 @@ namespace XrdCl
 
       }
       
+      // open archive file for reading and writing and with file permissions 644
       void Open()
       {
-        // open archive file for reading and writing and with file permissions 644
-        XRootDStatus st = archive.Open( archiveUrl, OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR );
-
-        if ( !st.IsOK() )
+        // stat to check if file exists already
+        URL url( archiveUrl );
+        FileSystem fs( url ) ;
+        StatInfo *response = 0;
+        // todo delete response when it is no longer needed
+        XRootDStatus st = fs.Stat( url.GetPath(), response ); // always returns stOK
+        
+        if( st.IsOK() && response ) //todo error handling?
         {
-          // TODO this isn't working!!!!
-          XRootDStatus newSt = archive.Open( archiveUrl, OpenFlags::New, Access::UR | Access::UW | Access::GR | Access::OR );
-          
-          if ( newSt.IsOK() )
+          // file exists, append to existing ZIP archive
+          st = archive.Open( archiveUrl, OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR );
+
+          if ( st.IsOK() )
           {
-            // file doesn't already exist, creating ZIP archive from scratch
+            std::cout << "Appending to existing zip archive...\n";
+            isOpen = true;
+            archiveSize = response->GetSize();
+
+            // read EOCD into buffer
+            uint32_t size = EOCD::maxCommentLength + EOCD::eocdBaseSize + ZIP64_EOCDL::zip64EocdlSize;
+            if ( size > archiveSize ) size = archiveSize;
+            uint64_t offset = archiveSize - size;
+            buffer.reset( new char[size] );          
+            uint32_t bytesRead = 0;
+
+            st = archive.Read( offset, size, buffer.get(), bytesRead );
+            if( !st.IsOK() ) throw "Read failed."; // todo error handling
+            
+            // find and store existing EOCD, ZIP64EOCD, ZIP64EOCDL and central directory records
+            ReadCentralDirectory( size );
+          }
+        }
+        else
+        {
+          // file doesn't already exist, create ZIP archive from scratch
+          // todo should the flag be just new or new and update/something else?
+          st = archive.Open( archiveUrl, OpenFlags::New, Access::UR | Access::UW | Access::GR | Access::OR );
+          
+          if ( st.IsOK() )
+          {            
             std::cout << "Creating new zip archive...\n";
             createNew = true;
             isOpen = true;
@@ -531,43 +563,13 @@ namespace XrdCl
           {
             // todo: proper error handling
             std::cout << st.ToStr();
-            std::cout << newSt.ToStr();
             std::cout << "Could not open " << archiveUrl << "\n";  
           }
-        }
-        else
-        {
-          // file exists, append to existing ZIP archive
-          std::cout << "Appending to existing zip archive...\n";
-          isOpen = true;
-
-          StatInfo *response = 0;
-          // todo should this be true or false
-          // todo delete response when it is no longer needed
-          XRootDStatus st = archive.Stat( false, response ); // always returns stOK
-          if( st.IsOK() && response ) //todo error handling?
-          {
-            archiveSize = response->GetSize();
-          }
-
-          // read EOCD into buffer
-          uint32_t size = EOCD::maxCommentLength + EOCD::eocdBaseSize + ZIP64_EOCDL::zip64EocdlSize;
-          if ( size > archiveSize ) size = archiveSize;
-          uint64_t offset = archiveSize - size;
-          buffer.reset( new char[size] );          
-          uint32_t bytesRead = 0;
-
-          XRootDStatus readSt = archive.Read( offset, size, buffer.get(), bytesRead );
-          if( !readSt.IsOK() ) throw "Read failed."; // todo error handling
-          
-          // find and store existing EOCD, ZIP64EOCD, ZIP64EOCDL and central directory records
-          ReadCentralDirectory( size );
         }
       }
       
       void Append( int inputFd, std::string inputFilename, uint32_t crc )
       {
-        std::cout << "append body\n";
         // todo: maybe move this out, have fileInfo as an argument to this function
         struct stat fileInfo;
         if ( fstat( inputFd, &fileInfo ) == -1 )
@@ -719,7 +721,6 @@ namespace XrdCl
 
       void Finalize()
       {
-        std::cout << "finalize body\n";
         writeOffset = eocd->useZip64 ? zip64Eocd->cdOffset : eocd->cdOffset;
         // write central directory records to archive
         if ( existingCdSize > 0 )
@@ -746,31 +747,23 @@ namespace XrdCl
 
       void WriteFileData( char *buffer, uint32_t size, uint64_t fileOffset ) 
       {
-        // std::cout << "write file data body\n";
         XRootDStatus st =	archive.Write( writeOffset + fileOffset, size, buffer );
         if( !st.IsOK() ) throw "Write file data Failed."; // todo error handling
       }
 
       void Close()
-      {
-        std::cout << "close body\n";
-        
+      {        
         if ( IsOpen() )
         {
-          std::cout << "isOpen true\n";
           XRootDStatus st = archive.Close();
           if( st.IsOK() ) 
           {
-            std::cout << "closed status ok\n";
+            isOpen = false;
             buffer.reset();
           }
-          //return st;
-        }
-        else
-        {
-          std::cout << "isOpen false\n";
-          //return 0;
-        }        
+          else
+            std::cout << "Failed to close archive.\n";
+        }      
       }
 
     private:
