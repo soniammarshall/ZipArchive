@@ -17,12 +17,7 @@
 
 namespace XrdCl 
 {
-
-  /*todo 
-  things to check or change in several places for the switch to using xrootd calls
-  - change the return type of the functions
-  */
-
+  
   const uint16_t ovrflw16 = 0xffff;
   const uint32_t ovrflw32 = 0xffffffff;
   const uint64_t ovrflw64 = 0xffffffffffffffff;
@@ -256,9 +251,8 @@ namespace XrdCl
       }
 
       if ( commentLength > 0 )
-      {       
-        // todo: use same variable st?
-        XRootDStatus st =	archive.Write( writeOffset, commentLength, comment.c_str() );
+      {
+        st =	archive.Write( writeOffset, commentLength, comment.c_str() );
         if( !st.IsOK() ) throw "Write CDFH Failed."; // todo error handling
       }
     }
@@ -520,9 +514,9 @@ namespace XrdCl
         FileSystem fs( url ) ;
         StatInfo *response = 0;
         // todo delete response when it is no longer needed
-        XRootDStatus st = fs.Stat( url.GetPath(), response ); // always returns stOK
+        XRootDStatus st = fs.Stat( url.GetPath(), response );
         
-        if( st.IsOK() && response ) //todo error handling?
+        if( st.IsOK() && response )
         {
           // file exists, append to existing ZIP archive
           st = archive.Open( archiveUrl, OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR );
@@ -550,8 +544,7 @@ namespace XrdCl
         else
         {
           // file doesn't already exist, create ZIP archive from scratch
-          // todo should the flag be just new or new and update/something else?
-          st = archive.Open( archiveUrl, OpenFlags::New, Access::UR | Access::UW | Access::GR | Access::OR );
+          st = archive.Open( archiveUrl, OpenFlags::New | OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR );
           
           if ( st.IsOK() )
           {            
@@ -583,8 +576,7 @@ namespace XrdCl
         CDFH *cdfh;
         uint32_t prevCdSize = 0;
         uint32_t prevCdOffset = 0;
-        // todo should I check eocd here or not necessary
-        if ( eocd && !createNew )
+        if ( !createNew )
         {
           // must be appending to existing archive
           if ( eocd->useZip64 )
@@ -767,7 +759,6 @@ namespace XrdCl
       }
 
     private:
-      // todo
       File                   &archive;
       std::string             archiveUrl;
       uint64_t                archiveSize;
