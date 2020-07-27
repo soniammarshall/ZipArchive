@@ -19,3 +19,4 @@
 - EOCD cdSize and cdOffset: if one overflows and is set to -1, must set BOTH to -1 and store in ZIP64 EOCD
 - The EOCD no. of records will never overflow (max is 65535)
 - Don't need to use (eg write out to zip archive) the nbDisk field in the extra field, since it is always 0
+- Use default timeout of 0 on the open/stat/read/write/close calls
