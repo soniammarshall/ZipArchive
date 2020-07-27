@@ -1,4 +1,4 @@
-//#include "XrdCl/XrdClZipArchiveWriter.hh"
+#include "XrdCl/XrdClFile.hh"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -18,7 +18,6 @@ namespace XrdCl
 
   /*todo 
   things to check or change in several places for the switch to using xrootd calls
-  - what should the timeout value be?
   - change the return type of the functions
   */
 
@@ -66,7 +65,7 @@ namespace XrdCl
         this->offset = 0;
     }
 
-    void Write( int archiveFd, uint64_t writeOffset )
+    void Write( File &archive, uint64_t writeOffset )
     {
       if ( totalSize > 0 )
       {
@@ -82,16 +81,9 @@ namespace XrdCl
         }
         else if ( offset > 0 )
           std::memcpy( buffer.get() + 4, &offset, 8 );
-
-        // todo: error handling
-        lseek( archiveFd, writeOffset, SEEK_SET );
-        uint16_t bytesWritten = write( archiveFd, buffer.get(), totalSize );
-        if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
-        /* todo
-        - change function argument to include the archive
-        XRootDStatus st =	archive.Write( writeOffset, totalSize, buffer.get(), 0);
-        if( !st.IsOK() ) {} // error handling
-        */
+        
+        XRootDStatus st =	archive.Write( writeOffset, totalSize, buffer.get() );
+        if( !st.IsOK() ) throw "Write ZIP extra Failed."; // todo error handling
       }
     }
 
@@ -151,7 +143,7 @@ namespace XrdCl
       lastModFileDate =  ( year << 9 ) | ( month << 5 ) | day ;
     }
 
-    void Write( int archiveFd, uint64_t writeOffset )
+    void Write( File &archive, uint64_t writeOffset )
     {
       uint16_t size = lfhSize - extraLength;
       std::unique_ptr<char[]> buffer { new char[size] };
@@ -167,20 +159,14 @@ namespace XrdCl
       std::memcpy( buffer.get() + 26, &filenameLength, 2 );
       std::memcpy( buffer.get() + 28, &extraLength, 2 );
       std::memcpy( buffer.get() + 30, filename.c_str(), filenameLength );
+      
+      XRootDStatus st =	archive.Write( writeOffset, size, buffer.get() );
+      if( !st.IsOK() ) throw "Write LFH Failed."; // todo error handling
 
-      // todo: error handling
-      lseek( archiveFd, writeOffset, SEEK_SET );
-      uint16_t bytesWritten = write( archiveFd, buffer.get(), size );
-      if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
-      /* todo
-      - change function argument to include the archive
-      XRootDStatus st =	archive.Write( writeOffset, size, buffer.get(), 0);
-      if( !st.IsOK() ) {} // error handling
-      */
       writeOffset += size;
       
       if ( extraLength > 0 )
-        extra->Write( archiveFd, writeOffset );
+        extra->Write( archive, writeOffset );
     }
 
     uint16_t minZipVersion;
@@ -234,7 +220,7 @@ namespace XrdCl
       cdfhSize = cdfhBaseSize + filenameLength + extraLength + commentLength;
     }
 
-    void Write( int archiveFd, uint64_t writeOffset )
+    void Write( File &archive, uint64_t writeOffset )
     {
       uint16_t size = cdfhSize - extraLength - commentLength;
       std::unique_ptr<char[]> buffer { new char[size] };
@@ -257,33 +243,21 @@ namespace XrdCl
       std::memcpy( buffer.get() + 42, &offset, 4 );
       std::memcpy( buffer.get() + 46, filename.c_str(), filenameLength );
 
-      // todo: error handling 
-      lseek( archiveFd, writeOffset, SEEK_SET );
-      uint16_t bytesWritten = write( archiveFd, buffer.get(), size );
-      if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
-      /* todo
-      - change function argument to include the archive
-      XRootDStatus st =	archive.Write( writeOffset, size, buffer.get(), 0);
-      if( !st.IsOK() ) {} // error handling
-      */
+      XRootDStatus st =	archive.Write( writeOffset, size, buffer.get() );
+      if( !st.IsOK() ) throw "Write CDFH Failed."; // todo error handling
       writeOffset += size;
       
       if ( extraLength > 0 )
       {
-        extra->Write( archiveFd, writeOffset );
+        extra->Write( archive, writeOffset );
         writeOffset += extraLength;
       }
 
       if ( commentLength > 0 )
-      {
-        // todo: error handling 
-        lseek( archiveFd, writeOffset, SEEK_SET );
-        bytesWritten = write( archiveFd, comment.c_str(), commentLength );
-        if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
-        /* todo
-        XRootDStatus st =	archive.Write( writeOffset, commentLength, comment.c_str(), 0);
-        if( !st.IsOK() ) {} // error handling
-        */
+      {       
+        // todo: use same variable st?
+        XRootDStatus st =	archive.Write( writeOffset, commentLength, comment.c_str() );
+        if( !st.IsOK() ) throw "Write CDFH Failed."; // todo error handling
       }
     }
 
@@ -355,7 +329,7 @@ namespace XrdCl
       eocdSize = eocdBaseSize + commentLength;
     }
 
-    void Write( int archiveFd, uint64_t writeOffset )
+    void Write( File &archive, uint64_t writeOffset )
     {
       std::unique_ptr<char[]> buffer { new char[eocdSize] };
       std::memcpy( buffer.get(), &eocdSign, 4 ); 
@@ -370,15 +344,8 @@ namespace XrdCl
       if ( commentLength > 0 )
         std::memcpy( buffer.get() + 22, comment.c_str(), commentLength ); 
 
-      // todo: error handling
-      lseek( archiveFd, writeOffset, SEEK_SET );
-      uint16_t bytesWritten = write( archiveFd, buffer.get(), eocdSize );
-      if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
-      /* todo
-      - change function argument to include the archive
-      XRootDStatus st =	archive.Write( writeOffset, eocdSize, buffer.get(), 0);
-      if( !st.IsOK() ) {} // error handling
-      */
+      XRootDStatus st =	archive.Write( writeOffset, eocdSize, buffer.get() );
+      if( !st.IsOK() ) throw "Write EOCD Failed."; // todo error handling
     }
 
     uint16_t nbDisk;
@@ -445,7 +412,7 @@ namespace XrdCl
       zip64EocdTotalSize = zip64EocdBaseSize + extensibleDataLength;
     }
 
-    void Write( int archiveFd, uint64_t writeOffset )
+    void Write( File &archive, uint64_t writeOffset )
     {
       std::unique_ptr<char[]> buffer { new char[zip64EocdTotalSize] };
       std::memcpy( buffer.get(), &zip64EocdSign, 4 );
@@ -462,15 +429,8 @@ namespace XrdCl
       if ( extensibleDataLength > 0 )
         std::memcpy( buffer.get() + 56, extensibleData.c_str(), extensibleDataLength );
 
-      // todo: error handling 
-      lseek( archiveFd, writeOffset, SEEK_SET );
-      uint64_t bytesWritten = write( archiveFd, buffer.get(), zip64EocdTotalSize );
-      if ( bytesWritten == ovrflw64 ) std::cout << "Write failed.\n";
-      /* todo
-      - change function argument to include the archive
-      XRootDStatus st =	archive.Write( writeOffset, zip64EocdTotalSize, buffer.get(), 0);
-      if( !st.IsOK() ) {} // error handling
-      */
+      XRootDStatus st =	archive.Write( writeOffset, zip64EocdTotalSize, buffer.get() );
+      if( !st.IsOK() ) throw "Write ZIP64 EOCD Failed."; // todo error handling
     }
 
     uint64_t zip64EocdSize;
@@ -516,7 +476,7 @@ namespace XrdCl
         zip64EocdOffset += eocd->cdSize;
     }
 
-    void Write( int archiveFd, uint64_t writeOffset )
+    void Write( File &archive, uint64_t writeOffset )
     {
       std::unique_ptr<char[]> buffer { new char[zip64EocdlSize] };
       std::memcpy( buffer.get(), &zip64EocdlSign, 4 );
@@ -524,15 +484,8 @@ namespace XrdCl
       std::memcpy( buffer.get() + 8, &zip64EocdOffset, 8 );
       std::memcpy( buffer.get() + 16, &totalNbDisks, 4 );
 
-      // todo: error handling 
-      lseek( archiveFd, writeOffset, SEEK_SET );
-      uint16_t bytesWritten = write( archiveFd, buffer.get(), zip64EocdlSize );
-      if ( bytesWritten == ovrflw16 ) std::cout << "Write failed.\n";
-      /* todo
-      - change function argument to include the archive
-      XRootDStatus st =	archive.Write( writeOffset, zip64EocdlSize, buffer.get(), 0);
-      if( !st.IsOK() ) {} // error handling
-      */
+      XRootDStatus st =	archive.Write( writeOffset, zip64EocdlSize, buffer.get() );
+      if( !st.IsOK() ) throw "Write ZIP64 EOCDL Failed."; // todo error handling
     }
     
     uint32_t nbDiskZip64Eocd;
@@ -547,73 +500,66 @@ namespace XrdCl
   {
     public:
 
-      ZipArchive( std::string archiveFilename )
-      {
-        this->archiveFilename = archiveFilename;
-        writeOffset = 0;
-        /* todo
-        - update the constructor args
-        this->archiveUrl = archiveUrl;
-        */
+      ZipArchive( File &archive, std::string archiveUrl ) : archive( archive ), 
+                                                            archiveUrl( archiveUrl ),
+                                                            existingCdSize( 0 ), 
+                                                            writeOffset( 0 ), 
+                                                            isOpen( false ), 
+                                                            createNew( false )
+      { 
+
       }
       
       void Open()
       {
         // open archive file for reading and writing and with file permissions 644
-        /* todo
-        - how can I tell if the file already exists or not? change the second open call to fit the answer
-        XRootDStatus st = archive.Open( archiveUrl, OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR, 0);
-        if( !st.IsOK() ) {} // error handling
-        */
-        archiveFd = open( archiveFilename.c_str(), O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
+        XRootDStatus st = archive.Open( archiveUrl, OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR );
 
-        if ( archiveFd == -1 )
+        if ( !st.IsOK() )
         {
-          if ( errno == ENOENT ) 
+          // TODO this isn't working!!!!
+          XRootDStatus newSt = archive.Open( archiveUrl, OpenFlags::New, Access::UR | Access::UW | Access::GR | Access::OR );
+          
+          if ( newSt.IsOK() )
           {
-            // file doesn't exist, create ZIP archive from scratch
-            // todo: error handling
-            archiveFd = open( archiveFilename.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH );
+            // file doesn't already exist, creating ZIP archive from scratch
             std::cout << "Creating new zip archive...\n";
+            createNew = true;
+            isOpen = true;
           }
-          else
+          else 
           {
             // todo: proper error handling
-            std::cout << "Could not open " << archiveFilename << "\n";  
+            std::cout << st.ToStr();
+            std::cout << newSt.ToStr();
+            std::cout << "Could not open " << archiveUrl << "\n";  
           }
         }
         else
         {
           // file exists, append to existing ZIP archive
-          std::cout << "Appending to existing zip archive...\n";   
+          std::cout << "Appending to existing zip archive...\n";
+          isOpen = true;
 
-          /* todo
-          - check how the stat structure differs to linux syscall
-          archive.Stat();
-          */
-          struct stat zipInfo;
-          if ( fstat( archiveFd, &zipInfo ) == -1 )
+          StatInfo *response = 0;
+          // todo should this be true or false
+          // todo delete response when it is no longer needed
+          XRootDStatus st = archive.Stat( false, response ); // always returns stOK
+          if( st.IsOK() && response ) //todo error handling?
           {
-            // todo: proper error handling
-            std::cout << "Could not stat " << archiveFilename << "\n";
+            archiveSize = response->GetSize();
           }
-          archiveSize = zipInfo.st_size;
 
           // read EOCD into buffer
           uint32_t size = EOCD::maxCommentLength + EOCD::eocdBaseSize + ZIP64_EOCDL::zip64EocdlSize;
           if ( size > archiveSize ) size = archiveSize;
           uint64_t offset = archiveSize - size;
-          buffer.reset( new char[size] );
-          // todo: error handling
-          lseek( archiveFd, offset, SEEK_SET );
-          uint32_t bytesRead = read( archiveFd, buffer.get(), size );
-          if ( bytesRead == ovrflw32 ) std::cout << "Read failed.\n";
-          /* todo
+          buffer.reset( new char[size] );          
           uint32_t bytesRead = 0;
-          XRootDStatus st = archive.Read( offset, size, buffer.get(), bytesRead, 0);
-          if( !st.IsOK() ) {} // error handling
-          */
 
+          XRootDStatus readSt = archive.Read( offset, size, buffer.get(), bytesRead );
+          if( !readSt.IsOK() ) throw "Read failed."; // todo error handling
+          
           // find and store existing EOCD, ZIP64EOCD, ZIP64EOCDL and central directory records
           ReadCentralDirectory( size );
         }
@@ -621,6 +567,7 @@ namespace XrdCl
       
       void Append( int inputFd, std::string inputFilename, uint32_t crc )
       {
+        std::cout << "append body\n";
         // todo: maybe move this out, have fileInfo as an argument to this function
         struct stat fileInfo;
         if ( fstat( inputFd, &fileInfo ) == -1 )
@@ -628,13 +575,14 @@ namespace XrdCl
           // todo: proper error handling
           std::cout << "Could not stat " << inputFilename << "\n";
         }
-        
+
         LFH *lfh = new LFH( inputFilename, crc, fileInfo.st_size, fileInfo.st_mtime );
 
         CDFH *cdfh;
         uint32_t prevCdSize = 0;
         uint32_t prevCdOffset = 0;
-        if ( eocd )
+        // todo should I check eocd here or not necessary
+        if ( eocd && !createNew )
         {
           // must be appending to existing archive
           if ( eocd->useZip64 )
@@ -669,6 +617,8 @@ namespace XrdCl
               prevCdOffset = eocd->cdOffset;
               eocd->cdSize = ovrflw32;
               eocd->cdOffset = ovrflw32;
+              zip64Eocd = new ZIP64_EOCD( eocd, lfh, cdfh, prevCdSize, prevCdOffset );
+              zip64Eocdl = new ZIP64_EOCDL( eocd, zip64Eocd );
             }
             else
             {
@@ -682,20 +632,19 @@ namespace XrdCl
           // must be creating new archive
           cdfh = new CDFH( lfh, fileInfo.st_mode, 0 );
           eocd = new EOCD( lfh, cdfh );
+          if ( eocd->useZip64 )
+          {
+            zip64Eocd = new ZIP64_EOCD( eocd, lfh, cdfh, prevCdSize, prevCdOffset );
+            zip64Eocdl = new ZIP64_EOCDL( eocd, zip64Eocd );
+          }
+          createNew = false;
         }
 
         cdRecords.push_back( cdfh );
-
-        if ( eocd->useZip64 && !zip64Eocd )
-        {
-          zip64Eocd = new ZIP64_EOCD( eocd, lfh, cdfh, prevCdSize, prevCdOffset );
-          zip64Eocdl = new ZIP64_EOCDL( eocd, zip64Eocd );
-        }
-
+        
         // write local file header to the archive
-        // todo: error handling
         writeOffset = ( cdfh->offset == ovrflw32 ) ? cdfh->extra->offset : cdfh->offset;
-        lfh->Write( archiveFd, writeOffset );
+        lfh->Write( archive, writeOffset );
         writeOffset += lfh->lfhSize;
       }
 
@@ -734,15 +683,10 @@ namespace XrdCl
               // we need to read more data
               uint32_t size = archiveSize - zip64Eocdl->zip64EocdOffset;
               buffer.reset( new char[size] );
-              // todo: error handling
-              lseek( archiveFd, zip64Eocdl->zip64EocdOffset, SEEK_SET );
-              bytesRead = read( archiveFd, buffer.get(), size );
-              if ( bytesRead == ovrflw32 ) std::cout << "Read failed.\n";
-              /* todo
-              uint32_t bytesRead = 0;
-              XRootDStatus st = archive.Read( zip64Eocdl->zip64EocdOffset, size, buffer.get(), bytesRead, 0);
-              if( !st.IsOK() ) {} // error handling
-              */
+              
+              uint32_t bytes = 0;
+              XRootDStatus st = archive.Read( zip64Eocdl->zip64EocdOffset, size, buffer.get(), bytes );
+              if( !st.IsOK() ) throw "Read failed."; // todo error handling
             }
 
             char *zip64EocdBlock = buffer.get() + ( zip64Eocdl->zip64EocdOffset - buffOffset );
@@ -758,89 +702,81 @@ namespace XrdCl
           */
         }
 
-        uint64_t offset = zip64Eocd ? zip64Eocd->cdOffset : eocd->cdOffset;
-        existingCdSize  = zip64Eocd ? zip64Eocd->cdSize   : eocd->cdSize;
+        uint64_t offset = eocd->useZip64 ? zip64Eocd->cdOffset : eocd->cdOffset;
+        existingCdSize  = eocd->useZip64 ? zip64Eocd->cdSize   : eocd->cdSize;
         cdBuffer.reset( new char[existingCdSize] );
-        // todo: error handling
-        lseek( archiveFd, offset, SEEK_SET );
-        bytesRead = read( archiveFd, cdBuffer.get(), existingCdSize );
-        if ( bytesRead == ovrflw32 ) std::cout << "Read failed.\n";
-        /* todo
-        uint32_t bytesRead = 0;
-        XRootDStatus st = archive.Read( offset, existingCdSize, cdBuffer.get(), bytesRead, 0);
-        if( !st.IsOK() ) {} // error handling
-        */
+        
+        uint32_t bytes = 0;
+        XRootDStatus st = archive.Read( offset, existingCdSize, cdBuffer.get(), bytes );
+        if( !st.IsOK() ) throw "Read failed."; // todo error handling
+      }
+
+      //taken from ZipArchiveReader.cc
+      bool IsOpen() const
+      {
+        return isOpen;
       }
 
       void Finalize()
       {
-        writeOffset = zip64Eocd ? zip64Eocd->cdOffset : eocd->cdOffset;
-        //todo: error handling
+        std::cout << "finalize body\n";
+        writeOffset = eocd->useZip64 ? zip64Eocd->cdOffset : eocd->cdOffset;
         // write central directory records to archive
         if ( existingCdSize > 0 )
         {
-          WriteExistingCd();
+          XRootDStatus st =	archive.Write( writeOffset, existingCdSize, cdBuffer.get() );
+          if( !st.IsOK() ) throw "Write existing CD Failed."; // todo error handling
           writeOffset += existingCdSize;
         }
         for ( uint16_t i=0; i<cdRecords.size(); i++)
         {
-          cdRecords[i]->Write( archiveFd, writeOffset );
+          cdRecords[i]->Write( archive, writeOffset );
           writeOffset += cdRecords[i]->cdfhSize;
         }
         // write EOCD to archive
         if ( eocd->useZip64 )
         {
-          zip64Eocd->Write( archiveFd, writeOffset );
+          zip64Eocd->Write( archive, writeOffset );
           writeOffset += zip64Eocd->zip64EocdTotalSize;
-          zip64Eocdl->Write( archiveFd, writeOffset );
+          zip64Eocdl->Write( archive, writeOffset );
           writeOffset += ZIP64_EOCDL::zip64EocdlSize;
         }
-        eocd->Write( archiveFd, writeOffset );
-      }
-
-      void WriteExistingCd()
-      {
-        // todo: error handling
-        lseek( archiveFd, writeOffset, SEEK_SET );
-        uint32_t bytesWritten = write( archiveFd, cdBuffer.get(), existingCdSize );
-        if ( bytesWritten == ovrflw32 ) std::cout << "Write failed.\n";
-        /* todo
-        XRootDStatus st =	archive.Write( writeOffset, existingCdSize, cdBuffer.get(), 0);
-        if( !st.IsOK() ) {} // error handling
-        */
-        
+        eocd->Write( archive, writeOffset );
       }
 
       void WriteFileData( char *buffer, uint32_t size, uint64_t fileOffset ) 
       {
-        // todo: error handling
-        lseek( archiveFd, writeOffset + fileOffset, SEEK_SET );
-        uint32_t bytesWritten = write( archiveFd, buffer, size );
-        if ( bytesWritten == ovrflw32 ) std::cout << "Write failed.\n";
-        /* todo
-        XRootDStatus st =	archive.Write( writeOffset + fileOffset, size, buffer, 0);
-        if( !st.IsOK() ) {} // error handling
-        */
+        // std::cout << "write file data body\n";
+        XRootDStatus st =	archive.Write( writeOffset + fileOffset, size, buffer );
+        if( !st.IsOK() ) throw "Write file data Failed."; // todo error handling
       }
 
       void Close()
       {
-        // todo: error handling
-        close ( archiveFd );
-        /* todo
-        - check if timeout should be 0 or something else?
-        XRootDStatus st = archive.Close( 0 );
-        if( !st.IsOK() ) {} // error handling
-        */
+        std::cout << "close body\n";
+        
+        if ( IsOpen() )
+        {
+          std::cout << "isOpen true\n";
+          XRootDStatus st = archive.Close();
+          if( st.IsOK() ) 
+          {
+            std::cout << "closed status ok\n";
+            buffer.reset();
+          }
+          //return st;
+        }
+        else
+        {
+          std::cout << "isOpen false\n";
+          //return 0;
+        }        
       }
 
     private:
-      /* todo
+      // todo
       File                   &archive;
       std::string             archiveUrl;
-      */
-      int                     archiveFd;
-      std::string             archiveFilename;
       uint64_t                archiveSize;
       std::vector<CDFH*>      cdRecords;
       EOCD                   *eocd;
@@ -850,6 +786,8 @@ namespace XrdCl
       std::unique_ptr<char[]> cdBuffer;
       uint32_t                existingCdSize;
       uint64_t                writeOffset;
+      bool                    isOpen;
+      bool                    createNew;
   };
 }
 
@@ -892,7 +830,7 @@ int OpenInputFile( std::string inputFilename )
 int main( int argc, char **argv )
 {
   std::string inputFilename = "file.txt";
-  std::string archiveFilename = "archive.zip"; 
+  std::string archiveUrl = "root://localhost//tmp/archive.zip"; 
   // uncomment crc when zipping file.txt
   //uint32_t crc = 0x797b4b0e;
   // uncomment crc when zipping 4GB.dat
@@ -900,22 +838,20 @@ int main( int argc, char **argv )
   if (argc >= 3)
   {
     inputFilename = argv[1];
-    archiveFilename = argv[2];
+    archiveUrl = argv[2];
   }
   else 
     std::cout << "No args given, using defaults.\n";
 
   std::cout << "Input file: " << inputFilename << "\n";
-  std::cout << "Output file: " << archiveFilename << "\n";
+  std::cout << "Output file: " << archiveUrl << "\n";
   std::cout << "crc: " << std::hex << crc << "\n"; 
 
   int inputFd = OpenInputFile( inputFilename );
 
-  /* todo
-  - declare and assign archiveUrl above
-  ZipArchive *archive = new ZipArchive( archiveUrl );
-  */
-  XrdCl::ZipArchive *archive = new XrdCl::ZipArchive( archiveFilename );
+  XrdCl::File *file = new XrdCl::File();
+  XrdCl::ZipArchive *archive = new XrdCl::ZipArchive( *file, archiveUrl );
+
   archive->Open();
   archive->Append( inputFd, inputFilename, crc );
 
@@ -927,6 +863,7 @@ int main( int argc, char **argv )
   do
   {
     // todo: error handling
+    // todo fix this loop is used one extra time
     lseek( inputFd, fileOffset, SEEK_SET );
     bytesRead = read( inputFd, buffer, size );
     if ( bytesRead == XrdCl::ovrflw32 ) std::cout << "Read failed.\n";
