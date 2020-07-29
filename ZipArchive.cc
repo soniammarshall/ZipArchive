@@ -1,6 +1,7 @@
 #include "XrdCl/XrdClFile.hh"
 #include "XrdCl/XrdClFileSystem.hh"
 #include "XrdCl/XrdClURL.hh"
+#include "XrdCl/XrdClMessageUtils.hh"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -81,6 +82,7 @@ namespace XrdCl
         
         XRootDStatus st =	archive.Write( writeOffset, totalSize, buffer.get() );
         if( !st.IsOK() ) throw "Write ZIP extra Failed."; // todo error handling
+        // todo async
       }
     }
 
@@ -159,6 +161,7 @@ namespace XrdCl
       
       XRootDStatus st =	archive.Write( writeOffset, size, buffer.get() );
       if( !st.IsOK() ) throw "Write LFH Failed."; // todo error handling
+      // todo async
 
       writeOffset += size;
       
@@ -242,6 +245,7 @@ namespace XrdCl
 
       XRootDStatus st =	archive.Write( writeOffset, size, buffer.get() );
       if( !st.IsOK() ) throw "Write CDFH Failed."; // todo error handling
+      // todo async
       writeOffset += size;
       
       if ( extraLength > 0 )
@@ -254,6 +258,7 @@ namespace XrdCl
       {
         st =	archive.Write( writeOffset, commentLength, comment.c_str() );
         if( !st.IsOK() ) throw "Write CDFH Failed."; // todo error handling
+        // todo async
       }
     }
 
@@ -342,6 +347,7 @@ namespace XrdCl
 
       XRootDStatus st =	archive.Write( writeOffset, eocdSize, buffer.get() );
       if( !st.IsOK() ) throw "Write EOCD Failed."; // todo error handling
+      // todo async
     }
 
     uint16_t nbDisk;
@@ -427,6 +433,7 @@ namespace XrdCl
 
       XRootDStatus st =	archive.Write( writeOffset, zip64EocdTotalSize, buffer.get() );
       if( !st.IsOK() ) throw "Write ZIP64 EOCD Failed."; // todo error handling
+      // todo async
     }
 
     uint64_t zip64EocdSize;
@@ -482,6 +489,7 @@ namespace XrdCl
 
       XRootDStatus st =	archive.Write( writeOffset, zip64EocdlSize, buffer.get() );
       if( !st.IsOK() ) throw "Write ZIP64 EOCDL Failed."; // todo error handling
+      // todo async
     }
     
     uint32_t nbDiskZip64Eocd;
@@ -515,9 +523,45 @@ namespace XrdCl
         StatInfo *response = 0;
         // todo delete response when it is no longer needed
         XRootDStatus st = fs.Stat( url.GetPath(), response );
-        
+
+        // todo async
+        // URL url( archiveUrl );
+        // FileSystem fs( url ) ;
+        // SyncResponseHandler *handler = new SyncResponseHandler();
+        // XRootDStatus asyncSt = fs.Stat( url.GetPath(), handler );
+        // if ( asyncSt.IsOK() )
+        // {
+        //   StatInfo *statInfo = 0;
+        //   XRootDStatus status = MessageUtils::WaitForResponse( handler, statInfo );
+        //   if( status.IsOK() )
+        //   {
+        //     archiveSize = statInfo->GetSize();
+        //     delete statInfo;
+        //   }
+        //   std::cout << "async get size: " << archiveSize << "\n";
+        // }
+        // else
+        //   throw "Stat failed";
+
         if( st.IsOK() && response )
         {
+          // todo async
+          // SyncResponseHandler *handler = new SyncResponseHandler();
+          // st = archive.Open( archiveUrl, OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR, handler );
+          // if ( st.IsOK() )
+          // {
+          //   XRootDStatus status = MessageUtils::WaitForStatus( handler );
+          //   if ( status.IsOK() )
+          //   {
+          //     std::cout << "opened ok\n";
+          //     SyncResponseHandler *closeHandler = new SyncResponseHandler();
+          //     st = archive.Close( closeHandler );
+          //     status = MessageUtils::WaitForStatus( closeHandler );
+          //     if ( status.IsOK() )
+          //       std::cout << "closed ok\n";
+          //   }
+          // }
+
           // file exists, append to existing ZIP archive
           st = archive.Open( archiveUrl, OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR );
 
@@ -533,9 +577,10 @@ namespace XrdCl
             uint64_t offset = archiveSize - size;
             buffer.reset( new char[size] );          
             uint32_t bytesRead = 0;
-
+            
             st = archive.Read( offset, size, buffer.get(), bytesRead );
             if( !st.IsOK() ) throw "Read failed."; // todo error handling
+            // todo async
             
             // find and store existing EOCD, ZIP64EOCD, ZIP64EOCDL and central directory records
             ReadCentralDirectory( size );
@@ -545,7 +590,8 @@ namespace XrdCl
         {
           // file doesn't already exist, create ZIP archive from scratch
           st = archive.Open( archiveUrl, OpenFlags::New | OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR );
-          
+          // todo async
+
           if ( st.IsOK() )
           {            
             std::cout << "Creating new zip archive...\n";
@@ -561,17 +607,9 @@ namespace XrdCl
         }
       }
       
-      void Append( int inputFd, std::string inputFilename, uint32_t crc )
+      void Append( std::string filename, uint32_t crc, off_t fileSize, time_t fileModTime, mode_t fileMode )
       {
-        // todo: maybe move this out, have fileInfo as an argument to this function
-        struct stat fileInfo;
-        if ( fstat( inputFd, &fileInfo ) == -1 )
-        {
-          // todo: proper error handling
-          std::cout << "Could not stat " << inputFilename << "\n";
-        }
-
-        LFH *lfh = new LFH( inputFilename, crc, fileInfo.st_size, fileInfo.st_mtime );
+        LFH *lfh = new LFH( filename, crc, fileSize, fileModTime );
 
         CDFH *cdfh;
         uint32_t prevCdSize = 0;
@@ -581,7 +619,7 @@ namespace XrdCl
           // must be appending to existing archive
           if ( eocd->useZip64 )
           {
-            cdfh = new CDFH( lfh, fileInfo.st_mode, zip64Eocd->cdOffset );
+            cdfh = new CDFH( lfh, fileMode, zip64Eocd->cdOffset );
             // update EOCD
             eocd->nbCdRecD += 1;
             eocd->nbCdRec += 1;
@@ -598,7 +636,7 @@ namespace XrdCl
           }
           else
           {
-            cdfh = new CDFH( lfh, fileInfo.st_mode, eocd->cdOffset );
+            cdfh = new CDFH( lfh, fileMode, eocd->cdOffset );
             // udpate EOCD
             eocd->nbCdRecD += 1;
             eocd->nbCdRec += 1;
@@ -624,7 +662,7 @@ namespace XrdCl
         else
         {
           // must be creating new archive
-          cdfh = new CDFH( lfh, fileInfo.st_mode, 0 );
+          cdfh = new CDFH( lfh, fileMode, 0 );
           eocd = new EOCD( lfh, cdfh );
           if ( eocd->useZip64 )
           {
@@ -681,6 +719,7 @@ namespace XrdCl
               uint32_t bytes = 0;
               XRootDStatus st = archive.Read( zip64Eocdl->zip64EocdOffset, size, buffer.get(), bytes );
               if( !st.IsOK() ) throw "Read failed."; // todo error handling
+              // todo async
             }
 
             char *zip64EocdBlock = buffer.get() + ( zip64Eocdl->zip64EocdOffset - buffOffset );
@@ -703,6 +742,7 @@ namespace XrdCl
         uint32_t bytes = 0;
         XRootDStatus st = archive.Read( offset, existingCdSize, cdBuffer.get(), bytes );
         if( !st.IsOK() ) throw "Read failed."; // todo error handling
+        // todo async
       }
 
       //taken from ZipArchiveReader.cc
@@ -719,6 +759,7 @@ namespace XrdCl
         {
           XRootDStatus st =	archive.Write( writeOffset, existingCdSize, cdBuffer.get() );
           if( !st.IsOK() ) throw "Write existing CD Failed."; // todo error handling
+          // todo async
           writeOffset += existingCdSize;
         }
         for ( uint16_t i=0; i<cdRecords.size(); i++)
@@ -741,6 +782,7 @@ namespace XrdCl
       {
         XRootDStatus st =	archive.Write( writeOffset + fileOffset, size, buffer );
         if( !st.IsOK() ) throw "Write file data Failed."; // todo error handling
+        // todo async
       }
 
       void Close()
@@ -748,6 +790,7 @@ namespace XrdCl
         if ( IsOpen() )
         {
           XRootDStatus st = archive.Close();
+          // todo async
           if( st.IsOK() ) 
           {
             isOpen = false;
@@ -776,15 +819,16 @@ namespace XrdCl
 }
 
 // for testing purposes - not in final API
-int OpenInputFile( std::string inputFilename )
+int OpenInputFile( std::string inputFilename, struct stat &fileInfo )
 {
-  // open input file for reading
+  // open input file for reading then stat it
   int inputFd = open( inputFilename.c_str(), O_RDONLY );
-  if ( inputFd == -1 )
-  {
-    // todo: proper error handling
-    std::cout << "Could not open " << inputFilename << "\n";  
-  }
+
+  if ( inputFd == -1 ) 
+    throw "Open input file failed.\n";
+  else if ( fstat( inputFd, &fileInfo ) == -1 )
+      throw "Stat input file failed.\n";
+
   return inputFd;
 }
 
@@ -831,30 +875,33 @@ int main( int argc, char **argv )
   std::cout << "Output file: " << archiveUrl << "\n";
   std::cout << "crc: " << std::hex << crc << "\n"; 
 
-  int inputFd = OpenInputFile( inputFilename );
+  struct stat fileInfo;
+  int inputFd = OpenInputFile( inputFilename, fileInfo );
 
   XrdCl::File *file = new XrdCl::File();
   XrdCl::ZipArchive *archive = new XrdCl::ZipArchive( *file, archiveUrl );
 
   archive->Open();
-  archive->Append( inputFd, inputFilename, crc );
+  archive->Append( inputFilename, crc, fileInfo.st_size, fileInfo.st_mtime, fileInfo.st_mode );
 
   std::cout << "Writing file data...\n";
   uint32_t bytesRead = 0;
   uint64_t fileOffset = 0;
   uint32_t size = 10240;
   char buffer[size];
-  do
+
+  lseek( inputFd, fileOffset, SEEK_SET );
+  bytesRead = read( inputFd, buffer, size );
+  if ( bytesRead == XrdCl::ovrflw32 ) std::cout << "Read failed.\n";
+  while( bytesRead != 0 )
   {
     // todo: error handling
-    // todo fix this loop is used one extra time
+    archive->WriteFileData( buffer, bytesRead, fileOffset );
+    fileOffset += bytesRead;
     lseek( inputFd, fileOffset, SEEK_SET );
     bytesRead = read( inputFd, buffer, size );
     if ( bytesRead == XrdCl::ovrflw32 ) std::cout << "Read failed.\n";
-    archive->WriteFileData( buffer, bytesRead, fileOffset );
-    fileOffset += bytesRead;
   } 
-  while( bytesRead != 0 );
   std::cout << "Finished writing file data.\n"; 
 
   // todo: error handling
