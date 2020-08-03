@@ -82,7 +82,6 @@ namespace XrdCl
         
         XRootDStatus st =	archive.Write( writeOffset, totalSize, buffer.get() );
         if( !st.IsOK() ) throw "Write ZIP extra Failed."; // todo error handling
-        // todo async
       }
     }
 
@@ -161,7 +160,6 @@ namespace XrdCl
       
       XRootDStatus st =	archive.Write( writeOffset, size, buffer.get() );
       if( !st.IsOK() ) throw "Write LFH Failed."; // todo error handling
-      // todo async
 
       writeOffset += size;
       
@@ -245,7 +243,6 @@ namespace XrdCl
 
       XRootDStatus st =	archive.Write( writeOffset, size, buffer.get() );
       if( !st.IsOK() ) throw "Write CDFH Failed."; // todo error handling
-      // todo async
       writeOffset += size;
       
       if ( extraLength > 0 )
@@ -258,7 +255,6 @@ namespace XrdCl
       {
         st =	archive.Write( writeOffset, commentLength, comment.c_str() );
         if( !st.IsOK() ) throw "Write CDFH Failed."; // todo error handling
-        // todo async
       }
     }
 
@@ -347,7 +343,6 @@ namespace XrdCl
 
       XRootDStatus st =	archive.Write( writeOffset, eocdSize, buffer.get() );
       if( !st.IsOK() ) throw "Write EOCD Failed."; // todo error handling
-      // todo async
     }
 
     uint16_t nbDisk;
@@ -433,7 +428,6 @@ namespace XrdCl
 
       XRootDStatus st =	archive.Write( writeOffset, zip64EocdTotalSize, buffer.get() );
       if( !st.IsOK() ) throw "Write ZIP64 EOCD Failed."; // todo error handling
-      // todo async
     }
 
     uint64_t zip64EocdSize;
@@ -489,7 +483,6 @@ namespace XrdCl
 
       XRootDStatus st =	archive.Write( writeOffset, zip64EocdlSize, buffer.get() );
       if( !st.IsOK() ) throw "Write ZIP64 EOCDL Failed."; // todo error handling
-      // todo async
     }
     
     uint32_t nbDiskZip64Eocd;
@@ -524,44 +517,8 @@ namespace XrdCl
         // todo delete response when it is no longer needed
         XRootDStatus st = fs.Stat( url.GetPath(), response );
 
-        // todo async
-        // URL url( archiveUrl );
-        // FileSystem fs( url ) ;
-        // SyncResponseHandler *handler = new SyncResponseHandler();
-        // XRootDStatus asyncSt = fs.Stat( url.GetPath(), handler );
-        // if ( asyncSt.IsOK() )
-        // {
-        //   StatInfo *statInfo = 0;
-        //   XRootDStatus status = MessageUtils::WaitForResponse( handler, statInfo );
-        //   if( status.IsOK() )
-        //   {
-        //     archiveSize = statInfo->GetSize();
-        //     delete statInfo;
-        //   }
-        //   std::cout << "async get size: " << archiveSize << "\n";
-        // }
-        // else
-        //   throw "Stat failed";
-
         if( st.IsOK() && response )
         {
-          // todo async
-          // SyncResponseHandler *handler = new SyncResponseHandler();
-          // st = archive.Open( archiveUrl, OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR, handler );
-          // if ( st.IsOK() )
-          // {
-          //   XRootDStatus status = MessageUtils::WaitForStatus( handler );
-          //   if ( status.IsOK() )
-          //   {
-          //     std::cout << "opened ok\n";
-          //     SyncResponseHandler *closeHandler = new SyncResponseHandler();
-          //     st = archive.Close( closeHandler );
-          //     status = MessageUtils::WaitForStatus( closeHandler );
-          //     if ( status.IsOK() )
-          //       std::cout << "closed ok\n";
-          //   }
-          // }
-
           // file exists, append to existing ZIP archive
           st = archive.Open( archiveUrl, OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR );
 
@@ -580,7 +537,6 @@ namespace XrdCl
             
             st = archive.Read( offset, size, buffer.get(), bytesRead );
             if( !st.IsOK() ) throw "Read failed."; // todo error handling
-            // todo async
             
             // find and store existing EOCD, ZIP64EOCD, ZIP64EOCDL and central directory records
             ReadCentralDirectory( size );
@@ -590,7 +546,6 @@ namespace XrdCl
         {
           // file doesn't already exist, create ZIP archive from scratch
           st = archive.Open( archiveUrl, OpenFlags::New | OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR );
-          // todo async
 
           if ( st.IsOK() )
           {            
@@ -719,7 +674,6 @@ namespace XrdCl
               uint32_t bytes = 0;
               XRootDStatus st = archive.Read( zip64Eocdl->zip64EocdOffset, size, buffer.get(), bytes );
               if( !st.IsOK() ) throw "Read failed."; // todo error handling
-              // todo async
             }
 
             char *zip64EocdBlock = buffer.get() + ( zip64Eocdl->zip64EocdOffset - buffOffset );
@@ -742,7 +696,6 @@ namespace XrdCl
         uint32_t bytes = 0;
         XRootDStatus st = archive.Read( offset, existingCdSize, cdBuffer.get(), bytes );
         if( !st.IsOK() ) throw "Read failed."; // todo error handling
-        // todo async
       }
 
       //taken from ZipArchiveReader.cc
@@ -759,7 +712,6 @@ namespace XrdCl
         {
           XRootDStatus st =	archive.Write( writeOffset, existingCdSize, cdBuffer.get() );
           if( !st.IsOK() ) throw "Write existing CD Failed."; // todo error handling
-          // todo async
           writeOffset += existingCdSize;
         }
         for ( uint16_t i=0; i<cdRecords.size(); i++)
@@ -782,15 +734,14 @@ namespace XrdCl
       {
         XRootDStatus st =	archive.Write( writeOffset + fileOffset, size, buffer );
         if( !st.IsOK() ) throw "Write file data Failed."; // todo error handling
-        // todo async
       }
 
       void Close()
-      {        
+      {
+        // todo do I need to check isOpen here
         if ( IsOpen() )
         {
           XRootDStatus st = archive.Close();
-          // todo async
           if( st.IsOK() ) 
           {
             isOpen = false;
@@ -798,7 +749,7 @@ namespace XrdCl
           }
           else
             std::cout << "Failed to close archive.\n";
-        }      
+        } 
       }
 
     private:
@@ -832,29 +783,7 @@ int OpenInputFile( std::string inputFilename, struct stat &fileInfo )
   return inputFd;
 }
 
-// for testing purposes - not in final API
-// void test()
-// {
-//   std::string inputFilename = "bible.txt";
-//   std::string inputFilename2 = "E.coli";
-//   std::string inputFilename3 = "world192.txt";
-//   int inputFd = OpenInputFile( inputFilename );
-//   int inputFd2 = OpenInputFile( inputFilename2 );
-//   int inputFd3 = OpenInputFile( inputFilename3 );
-
-//   ZipArchive *archive = new ZipArchive( "archive.zip" );
-//   archive->Open();
-//   archive->Append( inputFd, inputFilename, 0x75a16a5b );
-//   archive->WriteFileData( inputFd );
-//   archive->Append( inputFd2, inputFilename2, 0xe711a86e );
-//   archive->WriteFileData( inputFd2 );
-//   archive->Append( inputFd3, inputFilename3, 0x933325f6 );
-//   archive->WriteFileData( inputFd3 );
-//   archive->Finalize();
-//   archive->Close();
-// }
-
-// run as ./ZipArchive <input filename> <output filename>
+// run as ./ZipArchive <input filename> <output file url>
 int main( int argc, char **argv )
 {
   std::string inputFilename = "file.txt";
@@ -910,6 +839,5 @@ int main( int argc, char **argv )
   archive->Finalize();
   archive->Close();
 
-  // test();
   return 0;
 }
