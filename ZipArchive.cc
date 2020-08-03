@@ -527,7 +527,6 @@ namespace XrdCl
         URL url( archiveUrl );
         FileSystem fs( url ) ;
         StatInfo *response = 0;
-        // todo delete response when it is no longer needed
         XRootDStatus st = fs.Stat( url.GetPath(), response );
 
         if( st.IsOK() && response )
@@ -540,6 +539,7 @@ namespace XrdCl
             std::cout << "Appending to existing zip archive...\n";
             isOpen = true;
             archiveSize = response->GetSize();
+            delete response;
 
             // read EOCD into buffer
             uint32_t size = EOCD::maxCommentLength + EOCD::eocdBaseSize + ZIP64_EOCDL::zip64EocdlSize;
