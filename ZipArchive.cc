@@ -382,14 +382,26 @@ namespace XrdCl
       zip64EocdTotalSize = zip64EocdBaseSize + extensibleDataLength;
     }
 
-    ZIP64_EOCD( EOCD *eocd, LFH *lfh, CDFH *cdfh, uint32_t prevCdSize, uint32_t prevCdOffset )
+    ZIP64_EOCD( EOCD *eocd, 
+                LFH *lfh, 
+                CDFH *cdfh, 
+                uint16_t prevNbCdRecD = 0, 
+                uint16_t prevNbCdRec = 0,
+                uint32_t prevCdSize = 0, 
+                uint32_t prevCdOffset = 0 )
     {
       zipVersion = ( 3 << 8 ) | 63;
       minZipVersion = 45;
       nbDisk = eocd->nbDisk;
       nbDiskCd = eocd->nbDiskCd;
-      nbCdRecD = eocd->nbCdRecD;
-      nbCdRec = eocd->nbCdRec;
+      if ( eocd->nbCdRecD == ovrflw16 )
+        nbCdRecD = prevNbCdRecD + 1;
+      else
+        nbCdRecD = eocd->nbCdRecD;
+      if ( eocd->nbCdRec == ovrflw16 )
+        nbCdRec = prevNbCdRec + 1;
+      else
+        nbCdRec = eocd->nbCdRec;
       if ( eocd->cdSize == ovrflw32 )
         cdSize = prevCdSize + cdfh->cdfhSize;
       else
@@ -499,6 +511,7 @@ namespace XrdCl
 
       ZipArchive( File &archive, std::string archiveUrl ) : archive( archive ), 
                                                             archiveUrl( archiveUrl ),
+                                                            archiveSize( 0 ),
                                                             existingCdSize( 0 ), 
                                                             writeOffset( 0 ), 
                                                             isOpen( false ), 
@@ -567,8 +580,7 @@ namespace XrdCl
         LFH *lfh = new LFH( filename, crc, fileSize, fileModTime );
 
         CDFH *cdfh;
-        uint32_t prevCdSize = 0;
-        uint32_t prevCdOffset = 0;
+
         if ( !createNew )
         {
           // must be appending to existing archive
@@ -576,8 +588,14 @@ namespace XrdCl
           {
             cdfh = new CDFH( lfh, fileMode, zip64Eocd->cdOffset );
             // update EOCD
-            eocd->nbCdRecD += 1;
-            eocd->nbCdRec += 1;
+            if ( eocd->nbCdRecD + 1 >= ovrflw16 )
+              eocd->nbCdRecD = ovrflw16;
+            else
+              eocd->nbCdRecD += 1;
+            if ( eocd->nbCdRec + 1 >= ovrflw16 )
+              eocd->nbCdRec = ovrflw16;
+            else
+              eocd->nbCdRec += 1;
             // update ZIP64 EOCD
             zip64Eocd->nbCdRecD += 1;
             zip64Eocd->nbCdRec += 1;
@@ -592,23 +610,37 @@ namespace XrdCl
           else
           {
             cdfh = new CDFH( lfh, fileMode, eocd->cdOffset );
+
             // udpate EOCD
-            eocd->nbCdRecD += 1;
-            eocd->nbCdRec += 1;
-            
-            if ( eocd->cdSize + cdfh->cdfhSize >= ovrflw32 || lfh->compressedSize == ovrflw32 || eocd->cdOffset + lfh->lfhSize + lfh->compressedSize >= ovrflw32 )
+            if ( eocd->cdSize + cdfh->cdfhSize >= ovrflw32 
+                  || lfh->compressedSize == ovrflw32 
+                  || eocd->cdOffset + lfh->lfhSize + lfh->compressedSize >= ovrflw32
+                  || eocd->nbCdRecD + 1 >= ovrflw16
+                  || eocd->nbCdRec + 1 >= ovrflw16 )
             {
               // overflown
               eocd->useZip64 = true;
-              prevCdSize = eocd->cdSize;
-              prevCdOffset = eocd->cdOffset;
+              uint16_t prevNbCdRecD = eocd->nbCdRecD;
+              uint16_t prevNbCdRec = eocd->nbCdRec;
+              uint32_t prevCdSize = eocd->cdSize;
+              uint32_t prevCdOffset = eocd->cdOffset;
+              if ( eocd->nbCdRecD + 1 >= ovrflw16 )
+                eocd->nbCdRecD = ovrflw16;
+              else 
+                eocd->nbCdRecD += 1;
+              if ( eocd->nbCdRec + 1)
+                eocd->nbCdRec = ovrflw16;
+              else
+                eocd->nbCdRec += 1;
               eocd->cdSize = ovrflw32;
               eocd->cdOffset = ovrflw32;
-              zip64Eocd = new ZIP64_EOCD( eocd, lfh, cdfh, prevCdSize, prevCdOffset );
+              zip64Eocd = new ZIP64_EOCD( eocd, lfh, cdfh, prevNbCdRecD, prevNbCdRec, prevCdSize, prevCdOffset );
               zip64Eocdl = new ZIP64_EOCDL( eocd, zip64Eocd );
             }
             else
             {
+              eocd->nbCdRecD += 1;
+              eocd->nbCdRec += 1;
               eocd->cdSize += cdfh->cdfhSize;
               eocd->cdOffset += lfh->lfhSize + lfh->compressedSize;
             }
@@ -621,7 +653,7 @@ namespace XrdCl
           eocd = new EOCD( lfh, cdfh );
           if ( eocd->useZip64 )
           {
-            zip64Eocd = new ZIP64_EOCD( eocd, lfh, cdfh, prevCdSize, prevCdOffset );
+            zip64Eocd = new ZIP64_EOCD( eocd, lfh, cdfh );
             zip64Eocdl = new ZIP64_EOCDL( eocd, zip64Eocd );
           }
           createNew = false;
