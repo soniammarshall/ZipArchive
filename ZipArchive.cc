@@ -547,7 +547,6 @@ namespace XrdCl
 
           if ( st.IsOK() )
           {
-            std::cout << "Appending to existing zip archive...\n";
             isOpen = true;
             archiveSize = response->GetSize();
             delete response;
@@ -574,7 +573,6 @@ namespace XrdCl
 
           if ( st.IsOK() )
           {            
-            std::cout << "Creating new zip archive...\n";
             createNew = true;
             isOpen = true;
           }
@@ -825,21 +823,12 @@ int main( int argc, char **argv )
 {
   std::string inputFilename = "file.txt";
   std::string archiveUrl = "root://localhost//tmp/archive.zip"; 
-  // uncomment crc when zipping file.txt
-  //uint32_t crc = 0x797b4b0e;
-  // uncomment crc when zipping 4GB.dat
-  uint32_t crc = 0x756db3ac;
-  if (argc >= 3)
-  {
+  // crc for file.txt
+  uint32_t crc = 0x797b4b0e;
+  if (argc >= 2)
     inputFilename = argv[1];
+  if (argc >= 3)
     archiveUrl = argv[2];
-  }
-  else 
-    std::cout << "No args given, using defaults.\n";
-
-  std::cout << "Input file: " << inputFilename << "\n";
-  std::cout << "Output file: " << archiveUrl << "\n";
-  std::cout << "crc: " << std::hex << crc << "\n"; 
 
   struct stat fileInfo;
   int inputFd = OpenInputFile( inputFilename, fileInfo );
@@ -850,7 +839,6 @@ int main( int argc, char **argv )
   archive->Open();
   archive->Append( inputFilename, crc, fileInfo.st_size, fileInfo.st_mtime, fileInfo.st_mode );
 
-  std::cout << "Writing file data...\n";
   uint64_t fileOffset = 0;
   uint32_t size = 10240;
   char buffer[size];
@@ -867,7 +855,6 @@ int main( int argc, char **argv )
     bytesRead = read( inputFd, buffer, size );
     if ( bytesRead == XrdCl::ovrflw32 ) throw std::runtime_error("Failed to read input file.");
   } 
-  std::cout << "Finished writing file data.\n"; 
 
   if ( close( inputFd ) == -1 ) throw std::runtime_error("Failed to close input file.");
 
