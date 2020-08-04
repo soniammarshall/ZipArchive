@@ -542,7 +542,7 @@ namespace XrdCl
 
         if( st.IsOK() && response )
         {
-          // file exists, append to existing ZIP archive
+          // open existing ZIP archive to append to
           st = archive.Open( archiveUrl, OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR );
 
           if ( st.IsOK() )
@@ -557,7 +557,6 @@ namespace XrdCl
             uint64_t offset = archiveSize - size;
             buffer.reset( new char[size] );          
             uint32_t bytesRead = 0;
-            
             st = archive.Read( offset, size, buffer.get(), bytesRead );
             if( !st.IsOK() ) throw ZipHandlerException<AnyObject>( &st, 0 );
             
@@ -565,10 +564,12 @@ namespace XrdCl
             XRootDStatus st = ReadCentralDirectory( size );
             if ( !st.IsOK() ) throw ZipHandlerException<AnyObject>( &st, 0 );
           }
+          else 
+            throw ZipHandlerException<AnyObject>( &st, 0 );
         }
         else
         {
-          // file doesn't already exist, create ZIP archive from scratch
+          // open new ZIP archive
           st = archive.Open( archiveUrl, OpenFlags::New | OpenFlags::Update, Access::UR | Access::UW | Access::GR | Access::OR );
 
           if ( st.IsOK() )
@@ -581,6 +582,8 @@ namespace XrdCl
         }
       }
       
+      // prepare archive for appending file
+      // create headers, update end of central directory record and write LFH to the archive
       void Append( std::string filename, uint32_t crc, off_t fileSize, time_t fileModTime, mode_t fileMode )
       {
         LFH *lfh = new LFH( filename, crc, fileSize, fileModTime );
@@ -735,16 +738,17 @@ namespace XrdCl
         return st;
       }
 
-      //taken from ZipArchiveReader.cc
+      //taken from XrdClZipArchiveReader.cc
       bool IsOpen() const
       {
         return isOpen;
       }
 
+      // write the central directory and end of central directory record to the archive
       void Finalize()
       {
         writeOffset = eocd->useZip64 ? zip64Eocd->cdOffset : eocd->cdOffset;
-        // write central directory records to archive
+        // write central directory records
         if ( existingCdSize > 0 )
         {
           XRootDStatus st =	archive.Write( writeOffset, existingCdSize, cdBuffer.get() );
@@ -756,7 +760,7 @@ namespace XrdCl
           cdRecords[i]->Write( archive, writeOffset );
           writeOffset += cdRecords[i]->cdfhSize;
         }
-        // write EOCD to archive
+        // write EOCD, ZIP64EOCD and ZIP64EOCDL
         if ( eocd->useZip64 )
         {
           zip64Eocd->Write( archive, writeOffset );
@@ -767,12 +771,16 @@ namespace XrdCl
         eocd->Write( archive, writeOffset );
       }
 
+      // write the contents of the buffer to the archive
+      // must be called after Append() to ensure correct writeOffset
+      // fileOffset is the offset of the buffer contents in the input file
       void WriteFileData( char *buffer, uint32_t size, uint64_t fileOffset ) 
       {
         XRootDStatus st =	archive.Write( writeOffset + fileOffset, size, buffer );
         if( !st.IsOK() ) throw ZipHandlerException<AnyObject>( &st, 0 );
       }
 
+      // close the archive
       void Close()
       {
         if ( IsOpen() )
@@ -818,7 +826,8 @@ int OpenInputFile( std::string inputFilename, struct stat &fileInfo )
   return inputFd;
 }
 
-// run as ./ZipArchive <input filename> <output file url>
+// an example of how to use the ZipArchive API
+// run the executable with arguments: <input filename> <output file url>
 int main( int argc, char **argv )
 {
   std::string inputFilename = "file.txt";
@@ -839,14 +848,13 @@ int main( int argc, char **argv )
   archive->Open();
   archive->Append( inputFilename, crc, fileInfo.st_size, fileInfo.st_mtime, fileInfo.st_mode );
 
+  // write input file data to ZIP archive
   uint64_t fileOffset = 0;
   uint32_t size = 10240;
   char buffer[size];
-
   if ( lseek( inputFd, fileOffset, SEEK_SET ) == -1 ) throw std::runtime_error("Failed to seek input file.");
   uint32_t bytesRead = read( inputFd, buffer, size );
   if ( bytesRead == XrdCl::ovrflw32 ) throw std::runtime_error("Failed to read input file.");
-
   while( bytesRead != 0 )
   {
     archive->WriteFileData( buffer, bytesRead, fileOffset );
@@ -855,7 +863,6 @@ int main( int argc, char **argv )
     bytesRead = read( inputFd, buffer, size );
     if ( bytesRead == XrdCl::ovrflw32 ) throw std::runtime_error("Failed to read input file.");
   } 
-
   if ( close( inputFd ) == -1 ) throw std::runtime_error("Failed to close input file.");
 
   archive->Finalize();
