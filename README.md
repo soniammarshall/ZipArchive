@@ -6,7 +6,7 @@ The XRootD Client source code can be found here: https://github.com/xrootd/xroot
 
 The ZIP64 file specification can be found here: https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
 
-*ZipArchive.cc* is the important file, the other files were mainly for my use during development and testing. It provides an API which allows you to append local files to an existing remote ZIP archive (N.B. an XRootD Server must be running), or to create a remote ZIP archive from scratch containing local files.
+*ZipArchive.cc* is the important file, the other files were mainly for my use during development and testing. It provides an API which allows you to append local files to an existing remote ZIP archive (N.B. an XRootD Server must be running), or to create a new remote ZIP archive from local files.
 
 *experiments/LocalZipArchive.cc* contains a version of the code which works separately from XRootD, so can be used to append local files to a local ZIP archive.
 
