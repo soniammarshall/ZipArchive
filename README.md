@@ -10,6 +10,8 @@ The ZIP64 file specification can be found here: https://pkware.cachefly.net/webd
 
 *experiments/LocalZipArchive.cc* contains a version of the code which works separately from XRootD, so can be used to append local files to a local ZIP archive.
 
+Please read the *Project Report* for more details of my project, and check out the *Project Presentation* which I presented to the rest of the IT-ST-PDS section in the final team meeting I attended.
+
 ## Assumptions
 
 The following assumptions were made when developing the ZipArchive class.
